@@ -1,0 +1,16 @@
+# requirements.txt
+numpy
+pandas
+matplotlib
+networkx
+requests
+scikit-learn
+numba
+umap-learn
+leidenalg
+python-igraph
+altair
+nltk
+sentence-transformers
+python-dotenv
+tqdm

@@ -1,0 +1,5 @@
+.env
+code_from_notebook.md
+.venv/
+/sycophancy_analysis/__pycache__
+.windsurf/rules/specs-driven-development.md
