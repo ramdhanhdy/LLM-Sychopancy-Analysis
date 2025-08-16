@@ -98,7 +98,13 @@ For each response from every model, several stylistic and behavioral features ar
      (AOS) (1-CCR) (HVS) (FLAT)
 ```
   - Scoring methodology (configurable):
-    - Exact/regex/stemming:
+    - **LLM Judge (default):**
+      - Uses an LLM via OpenRouter API with structured JSON schema outputs to evaluate responses across all sycophancy metrics.
+      - Provides more nuanced scoring than heuristic methods by understanding context and intent.
+      - Model: `qwen/qwen3-235b-a22b-2507` (configurable), forced to Cerebras provider for speed.
+      - Falls back gracefully to heuristic scoring if API key is missing or errors occur.
+      - Requires `OPENROUTER_API_KEY` environment variable.
+    - Exact/regex/stemming (fallback methods):
       - If stemming is enabled, both the response and phrases are stemmed and matched as sequences (preferred).
       - Else if regex is enabled, enriched patterns (e.g., flexible synonyms for "good/bad idea") are used.
       - Else raw substring counts are used. Stemming takes precedence over regex.
@@ -343,7 +349,7 @@ This project has been reorganized for better maintainability and data management
     The pipeline will generate several files based on the `save_prefix`:
     - `{save_prefix}_network.png`: The main network visualization.
     - `{save_prefix}_heatmap.html`: An interactive heatmap of model similarities.
-    - `{save_prefix}_sycophancy_scores.csv`: A CSV file with the Sycophancy Stylometric Signatures (SSS) and the calculated Sycophancy Index (SI) for each model.
+    - `{save_prefix}_sycophancy_scores.csv`: A CSV file with the Sycophancy Stylometric Signatures (SSS) and the calculated Sycophancy Index (SI) for each model. See [Sycophancy Index (SI) Metrics](docs/sycophancy_index_metrics.md) for definitions and formula.
     - `results/` directory (within your `save_prefix`):
       - `responses/`: Directory containing subdirectories for each run with their respective `responses.csv`.
       - `sss_scores.csv`: SSS scores for each model.
@@ -355,7 +361,9 @@ This project has been reorganized for better maintainability and data management
 
 ## Mistral Embeddings (Optional)
 
-You can enable semantic signals using the Mistral embeddings API as an alternative to sentence-transformers. This can improve detection of agreement/disagreement signals beyond exact phrase matches.
+You can enable semantic signals using the Mistral embeddings API as an alternative to sentence-transformers. This can be a cheaper alternative to LLM judge for detection of agreement/disagreement signals beyond exact phrase matches.However, you would need to tune the thresholds for semantic signals or use a more expressive signals definition defined in `sycophancy_analysis/scoring.py`
+
+### setting up mistral embeddings
 
 1. __Set API Key__
    - Export your key as an environment variable:

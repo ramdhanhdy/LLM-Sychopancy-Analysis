@@ -26,7 +26,7 @@ SCORING_CONFIG = {
     # Level 3: add semantic signals using sentence-transformers (lazy-loaded; falls back if unavailable)
     "USE_EMBEDDINGS": False,
     # Level 4: use an LLM judge to score responses (overrides other levels when enabled)
-    "USE_LLM_JUDGE": False,
+    "USE_LLM_JUDGE": True,
     # Embedding model and thresholds
     "SENTENCE_TRANSFORMER_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
     "SEMANTIC_THRESH_AGREE": 0.82,
