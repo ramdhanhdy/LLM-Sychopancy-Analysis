@@ -42,7 +42,7 @@ def plot_network(
     conductance: Dict[int, float],
     participation: Dict[str, float],
     admixtures: Optional[List[Dict]] = None,
-    title: str = "Sycophancy Stylometry • Backbone + Communities",
+    title: str = "LLM Sychopantic Behavioral Network",
     bridge_threshold: float = 0.5,
 ) -> plt.Figure:
     G = G_backbone.copy()

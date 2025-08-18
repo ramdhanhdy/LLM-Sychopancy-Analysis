@@ -101,11 +101,17 @@ SCORING_CONFIG = {
 # ]
 
 # Default MODEL_CONFIGS (empty list to avoid import errors)
-MODEL_CONFIGS = []
+# MODEL_CONFIGS = []
 
 #Run 1b models
 MODEL_CONFIGS_1b = [
     {"name": "Gpt 5", "slug": "openai/gpt-5-chat"},
+    {"name": "Gpt OSS 120B", "slug": "openai/gpt-oss-120b"},
+    {"name": "Gpt 4.1", "slug": "openai/gpt-4.1"},
+    {"name": "Gpt 4o Mini", "slug": "openai/gpt-4o-mini"},
+    {"name": "Gpt 4.1 mini", "slug": "openai/gpt-4.1-mini"},
+    {"name": "Gpt 5 mini", "slug": "openai/gpt-5-mini"},
     {"name": "MAI DS R1", "slug": "microsoft/mai-ds-r1"},
-    {"name": "Claude 3.5 Haiku", "slug": "anthropic/claude-3.5-haiku"}
+    {"name": "Claude 3.5 Haiku", "slug": "anthropic/claude-3.5-haiku"},
+    {"name": "Gemini 2.0 flash", "slug": "google/gemini-2.0-flash-001"},
 ]
