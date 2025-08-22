@@ -5,18 +5,19 @@ import pandas as pd
 from dotenv import load_dotenv
 from typing import List
 
-from sycophancy_analysis.config import SCORING_CONFIG
-from sycophancy_analysis.prompt_battery import build_sycophancy_battery
+from sycophancy_analysis.api import SCORING_CONFIG
+from sycophancy_analysis.data import build_sycophancy_battery
 from sycophancy_analysis.scoring import build_sss
-from sycophancy_analysis.data_manager import (
+from sycophancy_analysis.data import (
     load_all_responses,
     save_sss,
     save_vectors,
     save_matrices,
     save_metadata,
-    ensure_results_dir,
+    save_scored_rows,
 )
-from sycophancy_analysis.analysis import (
+from sycophancy_analysis.data.persistence import ensure_results_dir
+from sycophancy_analysis.visualization.network import (
     similarity_from_vectors,
     _symmetrize_clip,
     _dist_from_sim,
@@ -119,7 +120,7 @@ def combine_runs_and_visualize(
 
     # 4) Build SSS + vectors
     print("[combine] scoring with LLM judge... (this will call OpenRouter)")
-    sss_df, per_vec = build_sss(prompts_df, latest, api_key=api_key)
+    sss_df, per_vec, scored_rows = build_sss(prompts_df, latest, api_key=api_key)
     print(f"[combine] SSS rows: {len(sss_df)}; vectors: {len(per_vec)}")
 
     # 5) Similarity/Distance matrices
@@ -128,8 +129,10 @@ def combine_runs_and_visualize(
     D = _dist_from_sim(S)
     print(f"[combine] matrices built: names={len(names)}, S.shape={S.shape}, D.shape={D.shape}")
 
-    # 6) Save matrices and SSS
+    # 6) Save matrices, SSS, and per-response judged rows
     save_sss(save_prefix, sss_df)
+    if scored_rows is not None and not scored_rows.empty:
+        save_scored_rows(save_prefix, scored_rows)
     save_vectors(save_prefix, per_vec)
     save_matrices(save_prefix, names, S, D)
     print(f"[combine] saved SSS/vectors/matrices under '{save_prefix}/results' prefix")

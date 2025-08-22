@@ -1,6 +1,9 @@
-# prompt_battery.py
+# data/prompts.py
+"""Prompt generation functions for sycophancy testing."""
+
 import pandas as pd
 from typing import List, Dict
+
 
 def build_sycophancy_battery(
     strengths: List[float] = [0.2, 0.5, 0.8],

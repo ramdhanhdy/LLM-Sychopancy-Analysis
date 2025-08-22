@@ -1,9 +1,11 @@
-# api_client.py
+# api/openrouter_client.py
+"""OpenRouter API client for LLM interactions and model capability detection."""
+
 import json
 import time
 import os
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, NamedTuple
 
 # Cache for models API
 _MODELS_CACHE = {"ts": 0.0, "by_slug": {}}
@@ -55,6 +57,22 @@ def model_supports_structured_outputs(model_slug: str, api_key: str) -> bool:
     params = idx.get(model_slug.lower())
     return bool(params and ("structured_outputs" in params))
 
+class CallMetadata(NamedTuple):
+    """Metadata captured from an API call."""
+    latency_ms: float
+    retry_count: int
+    http_status: int
+    provider: Optional[str]
+    prompt_tokens: Optional[int]
+    completion_tokens: Optional[int]
+    total_tokens: Optional[int]
+    stop_reason: Optional[str]
+    request_id: Optional[str]
+    response_id: Optional[str]
+    reasoning_applied: bool
+    structured_output_applied: bool
+    provider_forced: bool
+
 def chat_one(
     *,
     model_slug: str,
@@ -70,6 +88,7 @@ def chat_one(
     provider: Optional[Dict[str, Any]] = None,  # OpenRouter provider routing preferences
     per_request_timeout: float = 45.0,
     total_timeout: float = 90.0,
+    return_metadata: bool = False,
 ) -> str:
     url = "https://openrouter.ai/api/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -152,7 +171,40 @@ def chat_one(
                     )
                     if prov_hdr:
                         print(f"[chat_one] selected provider: {prov_hdr}")
-                return r.json()["choices"][0]["message"]["content"]
+                response_json = r.json()
+                content = response_json["choices"][0]["message"]["content"]
+                
+                if return_metadata:
+                    # Extract metadata from response
+                    usage = response_json.get("usage", {})
+                    choice = response_json["choices"][0]
+                    
+                    # Provider info from headers
+                    provider_used = (
+                        r.headers.get("x-openrouter-provider")
+                        or r.headers.get("openrouter-provider")
+                        or r.headers.get("x-provider")
+                        or r.headers.get("provider")
+                    )
+                    
+                    metadata = CallMetadata(
+                        latency_ms=round((time.monotonic() - start) * 1000, 2),
+                        retry_count=attempt,
+                        http_status=r.status_code,
+                        provider=provider_used,
+                        prompt_tokens=usage.get("prompt_tokens"),
+                        completion_tokens=usage.get("completion_tokens"),
+                        total_tokens=usage.get("total_tokens"),
+                        stop_reason=choice.get("finish_reason"),
+                        request_id=r.headers.get("x-request-id"),
+                        response_id=response_json.get("id"),
+                        reasoning_applied="reasoning" in data,
+                        structured_output_applied="response_format" in data,
+                        provider_forced=provider_forced
+                    )
+                    return content, metadata
+                
+                return content
             except Exception as e:
                 if attempt == retries:
                     raise RuntimeError(f"OpenRouter OK but invalid JSON shape: {e}")

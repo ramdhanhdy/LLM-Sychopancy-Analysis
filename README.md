@@ -312,18 +312,26 @@ To aid in the interpretation of the lineage map, key metrics are provided. These
 
 This project has been reorganized for better maintainability and data management. The core logic is now in the `sycophancy_analysis` package.
 
-- `sycophancy_analysis/`: Main package containing the analysis modules.
-  - `__init__.py`: Package initialization file.
-  - `config.py`: Configuration settings, including model lists and reasoning model slugs.
-  - `prompt_battery.py`: Functions for generating the sycophancy prompt set.
-  - `api_client.py`: Handles API calls to OpenRouter.
-  - `scoring.py`: Contains the stylometric scoring logic for model responses.
-  - `analysis.py`: Core analysis functions for similarity matrices, graph construction, and community detection.
-  - `visualization.py`: Plotting functions for network graphs and heatmaps.
-  - `data_manager.py`: Handles data persistence for incremental updates.
-  - `pipeline.py`: The main pipeline function orchestrating the analysis steps.
-- `main.py`: Command-line interface to run the pipeline.
-- `requirements.txt`: List of required Python packages.
+- `sycophancy_analysis/`
+  - `api/`: OpenRouter client and configuration
+    - `config.py`: `SCORING_CONFIG`, `MODEL_CONFIGS`, output formats, reasoning annotations
+    - `openrouter_client.py`: API helpers (`chat_one`, model capability checks)
+  - `data/`: Data layer
+    - `prompts.py`: Build the sycophancy prompt battery
+    - `collection.py`: Collect model responses (incremental, timestamped runs)
+    - `persistence.py`: Save artifacts (SSS, vectors, matrices, metadata, scored_rows)
+    - `loading.py`: Backward-compatible loaders (flat and legacy nested layouts)
+    - `metadata.py`: Comprehensive metadata sidecar
+  - `scoring/`: Scoring engine
+    - `constants.py`, `text_utils.py`, `embeddings.py` (incl. `MistralEmbedder`), `core.py`, `llm_judge.py`, `sss.py`
+    - `pipeline.py`: `run_scoring()` stage
+  - `visualization/`: Visualization stack
+    - `network.py`, `heatmap.py`, `metrics.py`, `metadata.py`
+    - `pipeline.py`: `run_visualization()` stage
+  - `pipeline.py`: End-to-end `run_sycophancy_pipeline()`
+- `main.py`: CLI entrypoint (stages, filters, interactive config)
+- `utils/combine_runs.py`: Utilities for merging/combining outputs
+- `requirements.txt`: Python dependencies
 
 ## Usage
 
@@ -336,34 +344,61 @@ This project has been reorganized for better maintainability and data management
     python main.py --api_key YOUR_OPENROUTER_KEY --save_prefix results/my_analysis
     ```
     Replace `YOUR_OPENROUTER_KEY` with your actual OpenRouter API key. 
-    You can also specify other options like `--samples_per_prompt`, `--temperature`, etc. Use `python main.py --help` for a full list of options.
+    You can specify other options like `--samples_per_prompt`, `--temperature`, etc. Use `python main.py --help` for a full list.
+
+    - Stages: `--stage all|collect|score|viz` (default: `all`)
+    - Interactive scoring setup: `--interactive` (toggle Regex/Stemming/Embeddings/Judge, provider, thresholds)
+
+    Examples:
+    ```bash
+    # Collect only
+    python main.py --stage collect --save_prefix results/run_1 --api_key $OPENROUTER_API_KEY
+
+    # Score only (on previously collected responses under save_prefix)
+    python main.py --stage score --save_prefix results/run_1 --api_key $OPENROUTER_API_KEY
+
+    # Visualization only (after scoring)
+    python main.py --stage viz --save_prefix results/run_1
+    ```
 
 3.  **Incremental Updates**:
-    The pipeline now supports running multiple times with different sets of models. Results are saved in the `results` subdirectory of your `save_prefix`. If you run the pipeline again with the same `save_prefix` but a different set of models, it will update the existing results:
-    - All LLM responses are preserved for each run in separate timestamped directories.
-    - For models that already exist in previous runs, only the latest responses are used for SSS calculation.
-    - For new models, their data will be added to the existing datasets.
-    - All outputs (network visualization, heatmap, scores CSV) will be regenerated based on the combined dataset.
+    The pipeline supports resuming with subsets of models. Artifacts are saved under the directory at `--save_prefix` (flat layout). Re-running with the same `save_prefix` merges new models and keeps the latest responses per model/prompt.
+
+    - Filters (any combination):
+      - `--include_slugs`, `--exclude_slugs` (OpenRouter slugs)
+      - `--include_names`, `--exclude_names` (human-friendly names from config)
+    - Only selected models are called; existing data is preserved and merged.
+
+    Examples:
+    ```bash
+    # Resume run_1, skip models already completed
+    python main.py --stage collect --save_prefix results/run_1 \
+      --exclude_slugs "openai/gpt-4.1,anthropic/claude-3.5-haiku" --api_key $OPENROUTER_API_KEY
+
+    # Collect for a specific subset by name
+    python main.py --stage collect --save_prefix results/run_1 \
+      --include_names "Gpt 4.1,Gemma 3 12b" --api_key $OPENROUTER_API_KEY
+    ```
 
 4.  **Outputs**:
-    The pipeline will generate several files based on the `save_prefix`:
-    - `{save_prefix}_network.png`: The main network visualization.
-    - `{save_prefix}_heatmap.html`: An interactive heatmap of model similarities.
-    - `{save_prefix}_sycophancy_scores.csv`: A CSV file with the Sycophancy Stylometric Signatures (SSS) and the calculated Sycophancy Index (SI) for each model. See [Sycophancy Index (SI) Metrics](docs/sycophancy_index_metrics.md) for definitions and formula.
-    - `results/` directory (within your `save_prefix`):
-      - `responses/`: Directory containing subdirectories for each run with their respective `responses.csv`.
-      - `sss_scores.csv`: SSS scores for each model.
-      - `sss_vectors.json`: SSS vectors used for similarity calculations.
-      - `similarity_matrix.npy`: NumPy array of the similarity matrix.
-      - `distance_matrix.npy`: NumPy array of the distance matrix.
-      - `model_names.json`: List of model names corresponding to the matrices.
-      - `metadata.json`: Metadata about the analysis run.
+    With `--save_prefix results/my_analysis`, artifacts are saved under the directory `results/my_analysis/`:
+    - Top-level files:
+      - `my_analysis_network.png`
+      - `my_analysis_heatmap.html`
+      - `my_analysis_sycophancy_scores.csv` (Sycophancy Index table and SSS aggregates)
+    - Inside `results/my_analysis/` (flat results layout):
+      - `responses/` → `run_YYYYMMDD_HHMMSS/` → `responses.csv` (or `.json` per config)
+      - `sss_scores.csv` (or `.json`)
+      - `sss_vectors.json`
+      - `similarity_matrix.npy`, `distance_matrix.npy`
+      - `model_names.json`, `metadata.json`
+      - `scored_rows.csv` (per-response LLM-judge outputs with `pred_label`)
 
 ## Mistral Embeddings (Optional)
 
-You can enable semantic signals using the Mistral embeddings API as an alternative to sentence-transformers. This can be a cheaper alternative to LLM judge for detection of agreement/disagreement signals beyond exact phrase matches.However, you would need to tune the thresholds for semantic signals or use a more expressive signals definition defined in `sycophancy_analysis/scoring.py`
+You can enable semantic signals using the Mistral embeddings API as an alternative to sentence-transformers. This can be a cheaper alternative to LLM judge for detection of agreement/disagreement signals beyond exact phrase matches. You may need to tune thresholds or adjust concept sets defined in `sycophancy_analysis/scoring/constants.py`.
 
-### setting up mistral embeddings
+### Setting up Mistral embeddings
 
 1. __Set API Key__
    - Export your key as an environment variable:
@@ -371,18 +406,19 @@ You can enable semantic signals using the Mistral embeddings API as an alternati
      - Windows (Powershell): `$Env:MISTRAL_API_KEY = 'sk_...'`
 
 2. __Enable in Config__
-   - Edit `sycophancy_analysis/config.py` and set:
+   - Edit `sycophancy_analysis/api/config.py` and set:
      - `SCORING_CONFIG["USE_EMBEDDINGS"] = True`
      - `SCORING_CONFIG["EMBEDDINGS_PROVIDER"] = "mistral"`
    - Optional: tweak thresholds
      - `SCORING_CONFIG["SEMANTIC_THRESH_AGREE"]` (default `0.82`)
      - `SCORING_CONFIG["SEMANTIC_THRESH_DISAGREE"]` (default `0.82`)
+     - `SCORING_CONFIG["SEMANTIC_THRESH_EVASION"]` (default `0.82`)
 
 3. __Quick Sanity Check__
    - Run a short script to verify end-to-end scoring:
    ```python
    from sycophancy_analysis.scoring import score_response, PromptMeta
-   from sycophancy_analysis.config import SCORING_CONFIG
+   from sycophancy_analysis.api.config import SCORING_CONFIG
 
    # Ensure embeddings are enabled and Mistral provider is selected
    SCORING_CONFIG.update({
