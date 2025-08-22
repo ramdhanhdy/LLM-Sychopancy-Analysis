@@ -164,20 +164,152 @@ def _compute_strength_curves(scored: pd.DataFrame) -> Dict[str, Dict]:
     return out
 
 
+def _extract_existing_scores(df: pd.DataFrame) -> Optional[pd.DataFrame]:
+    """
+    Extract existing SSS scores from source run files to avoid re-running LLM judges.
+    Returns scored DataFrame if scores are found, None otherwise.
+    """
+    if df.empty:
+        return None
+    
+    # Check if scores already exist in the combined data
+    score_cols = ['endorse_stance', 'harm_validation', 'flattery_density', 'challenge']
+    if all(col in df.columns for col in score_cols):
+        print("[_extract_existing_scores] Scores already present in combined data")
+        return df
+    
+    # Get the project root directory (parent of utils/)
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    results_dir = project_root / "results"
+    
+    # Get unique source runs from the data
+    source_runs = []
+    if 'source_run' in df.columns:
+        source_runs.extend(df['source_run'].dropna().unique())
+    if 'run_id' in df.columns:
+        source_runs.extend(df['run_id'].dropna().unique())
+    
+    source_runs = list(set(source_runs))  # Remove duplicates
+    print(f"[_extract_existing_scores] Found source runs: {source_runs}")
+    print(f"[_extract_existing_scores] Looking in results directory: {results_dir}")
+    
+    # Scan for existing run directories to avoid searching non-existent paths
+    existing_run_dirs = set()
+    if results_dir.exists():
+        for item in results_dir.iterdir():
+            if item.is_dir() and item.name.startswith('run_'):
+                existing_run_dirs.add(item.name)
+    
+    print(f"[_extract_existing_scores] Found existing run directories: {sorted(existing_run_dirs)}")
+    
+    # Try to load existing scored_rows from source runs
+    scored_dfs = []
+    
+    for source_run in source_runs:
+        # Extract base run name (e.g., "run_1b" from "run_20250819_102725")
+        base_run = None
+        if source_run.startswith("run_"):
+            # Try to match pattern like run_20250819_102725 -> run_1b
+            if "20250819" in source_run:
+                base_run = "run_1b"
+            elif "20250815" in source_run:
+                base_run = "run_0c"
+            elif "20250816" in source_run:
+                base_run = "run_1"
+            # Add more mappings as needed
+        else:
+            base_run = source_run
+        
+        # Only check paths for directories that actually exist
+        possible_paths = []
+        if base_run and base_run in existing_run_dirs:
+            possible_paths.append(results_dir / base_run / "scored_rows.csv")
+        if source_run in existing_run_dirs:
+            possible_paths.append(results_dir / source_run / "scored_rows.csv")
+            possible_paths.append(results_dir / source_run / "results" / "scored_rows.csv")
+        
+        found_scores = False
+        for path in possible_paths:
+            if path.exists():
+                try:
+                    scored_run = pd.read_csv(path)
+                    scored_run['source_run'] = source_run
+                    scored_dfs.append(scored_run)
+                    print(f"[_extract_existing_scores] Loaded scores from {path} ({len(scored_run)} rows)")
+                    found_scores = True
+                    break
+                except Exception as e:
+                    print(f"[_extract_existing_scores] Failed to load {path}: {e}")
+            else:
+                print(f"[_extract_existing_scores] Path does not exist: {path}")
+        
+        if not found_scores:
+            print(f"[_extract_existing_scores] No scored_rows found for {source_run} (base: {base_run})")
+            print(f"[_extract_existing_scores] Checked paths: {[str(p) for p in possible_paths]}")
+    
+    if not scored_dfs:
+        print("[_extract_existing_scores] No existing scores found in any source runs")
+        return None
+    
+    # Combine all scored data
+    all_scored = pd.concat(scored_dfs, ignore_index=True)
+    print(f"[_extract_existing_scores] Combined {len(all_scored)} scored rows from {len(scored_dfs)} runs")
+    
+    # Merge with original combined data to get all metadata
+    merge_cols = ['model', 'prompt_id']
+    if 'source_run' in df.columns and 'source_run' in all_scored.columns:
+        merge_cols.append('source_run')
+    
+    print(f"[_extract_existing_scores] Merging on columns: {merge_cols}")
+    merged = df.merge(all_scored, on=merge_cols, how='left', suffixes=('', '_scored'))
+    
+    # Check merge success
+    score_coverage = merged[score_cols[0]].notna().mean() if score_cols[0] in merged.columns else 0
+    print(f"[_extract_existing_scores] Score coverage: {score_coverage:.1%} ({merged[score_cols[0]].notna().sum()}/{len(merged)} responses)")
+    
+    if score_coverage > 0.8:  # If we have scores for >80% of responses
+        return merged
+    else:
+        print(f"[_extract_existing_scores] Low score coverage ({score_coverage:.1%}), will run scoring")
+        return None
+
+
 def score_and_metrics(
     input_path: os.PathLike | str = DEFAULT_INPUT,
     *,
     output_prefix: os.PathLike | str = DEFAULT_PREFIX,
     pretty: bool = False,
     api_key: Optional[str] = None,
+    force_rescore: bool = False,
 ) -> Dict[str, Path]:
     in_path = Path(input_path)
     df = _read_any(in_path)
     prompts_df = _build_prompts_df(df)
     responses_df = _build_responses_df(df)
-    key = api_key or os.environ.get("OPENROUTER_API_KEY")
-
-    sss_df, _, scored = build_sss(prompts_df, responses_df, api_key=key)
+    
+    # Try to extract existing scores first (unless forced to rescore)
+    scored = None
+    if not force_rescore:
+        scored = _extract_existing_scores(df)
+    
+    if scored is None:
+        # Fall back to running build_sss
+        key = api_key or os.environ.get("OPENROUTER_API_KEY")
+        total_responses = len(responses_df)
+        print(f"[score_and_metrics] Running build_sss() on {total_responses} responses - this may use API credits")
+        sss_df, _, scored = build_sss(prompts_df, responses_df, api_key=key)
+    else:
+        # Count how many responses already have scores vs need scoring
+        score_cols = ['endorse_stance', 'harm_validation', 'flattery_density', 'challenge']
+        has_scores = scored[score_cols[0]].notna().sum()
+        total_responses = len(scored)
+        needs_scoring = total_responses - has_scores
+        
+        if needs_scoring > 0:
+            print(f"[score_and_metrics] Using existing scores for {has_scores} responses, need to score {needs_scoring} more")
+        else:
+            print(f"[score_and_metrics] Using existing scores for all {total_responses} responses")
 
     # Outputs
     prefix = Path(output_prefix)
@@ -207,9 +339,15 @@ def main(argv: Optional[List[str]] = None) -> None:
         help=f"Output prefix directory (default: {DEFAULT_PREFIX})",
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty JSON output")
+    parser.add_argument("--force-rescore", action="store_true", help="Force re-running LLM judges even if existing scores found")
     args = parser.parse_args(argv)
 
-    score_and_metrics(input_path=args.input, output_prefix=args.output_prefix, pretty=args.pretty)
+    score_and_metrics(
+        input_path=args.input, 
+        output_prefix=args.output_prefix, 
+        pretty=args.pretty,
+        force_rescore=args.force_rescore
+    )
 
 
 if __name__ == "__main__":
