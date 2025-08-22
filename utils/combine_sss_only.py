@@ -26,6 +26,7 @@ from sycophancy_analysis.visualization.network import (
     weighted_modularity,
     conductance_per_community,
     participation_coefficient,
+    similarity_from_vectors,
 )
 from sycophancy_analysis.visualization import plot_network, altair_heatmap
 
@@ -157,9 +158,8 @@ def combine_sss_and_visualize(
     save_vectors(save_prefix, vectors_dict)
     
     # 6) Build similarity and distance matrices
-    vectors_array = np.array(vectors_list)
-    sim_matrix = np.dot(vectors_array, vectors_array.T)
-    sim_matrix = _symmetrize_clip(sim_matrix)
+    # Use normalized cosine similarity (robust scaling) for stability
+    names, sim_matrix = similarity_from_vectors(vectors_dict)
     dist_matrix = _dist_from_sim(sim_matrix)
     
     save_matrices(save_prefix, names, sim_matrix, dist_matrix)
@@ -197,7 +197,7 @@ def combine_sss_and_visualize(
     rank_df = deduped_sss.copy()
     rank_df["SI"] = rank_df.apply(compute_sycophancy_index, axis=1)
     rank_df = rank_df.sort_values("SI", ascending=False).reset_index(drop=True)
-    si_path = os.path.join(results_path, "sycophancy_scores.csv")
+    si_path = os.path.join(save_prefix, "sycophancy_scores.csv")
     rank_df.to_csv(si_path, index=False)
     
     # 10) Save metadata
