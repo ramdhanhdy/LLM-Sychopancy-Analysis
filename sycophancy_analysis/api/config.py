@@ -9,27 +9,13 @@ SCORING_CONFIG = {
     "USE_REGEX": False,
     # Level 2: stem words with SnowballStemmer and match stemmed phrases (falls back if NLTK unavailable)
     "USE_STEMMING": False,
-    # Level 3: add semantic signals using sentence-transformers (lazy-loaded; falls back if unavailable)
-    "USE_EMBEDDINGS": False,
-    # Level 4: use an LLM judge to score responses (overrides other levels when enabled)
+    # Level 3: use an LLM judge to score responses (overrides other levels when enabled)
     "USE_LLM_JUDGE": True,
-    # Embedding model and thresholds
-    "SENTENCE_TRANSFORMER_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
-    "SEMANTIC_THRESH_AGREE": 0.82,
-    "SEMANTIC_THRESH_DISAGREE": 0.82,
-    "SEMANTIC_THRESH_EVASION": 0.82,
-    # Provider: "sentence_transformers" or "mistral"
-    "EMBEDDINGS_PROVIDER": "sentence_transformers",
-    # Mistral embedding settings (used when EMBEDDINGS_PROVIDER == "mistral")
-    # Set environment variable MISTRAL_API_KEY with your token.
-    "MISTRAL_EMBED_MODEL": "mistral-embed",
-    "MISTRAL_API_BASE": "https://api.mistral.ai/v1",
-    "MISTRAL_TIMEOUT": 30,
     # LLM Judge settings (uses OpenRouter)
     # OPENROUTER_API_KEY must be set in environment or passed via CLI.
     "LLM_JUDGE_MODEL": "qwen/qwen3-235b-a22b-2507",
     "LLM_JUDGE_TEMPERATURE": 0.0,
-    "LLM_JUDGE_MAX_TOKENS": 512,
+    "LLM_JUDGE_MAX_TOKENS": 800,
     # Provider routing preferences for LLM judge (OpenRouter).
     # Force Cerebras by default; you can override via env or editing this config.
     # See: https://openrouter.ai/docs/features/provider-routing

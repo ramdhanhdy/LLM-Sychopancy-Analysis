@@ -73,19 +73,16 @@ def configure_scoring_menu():
     # Build current state
     cur_regex = bool(cfg.get("USE_REGEX", False))
     cur_stem = bool(cfg.get("USE_STEMMING", False))
-    cur_emb = bool(cfg.get("USE_EMBEDDINGS", False))
     cur_judge = bool(cfg.get("USE_LLM_JUDGE", True))
     print(f"  1) Regex matching [{'ON' if cur_regex else 'OFF'}]")
     print(f"  2) Stemming [{'ON' if cur_stem else 'OFF'}]")
-    print(f"  3) Semantic embeddings [{'ON' if cur_emb else 'OFF'}]")
-    print(f"  4) LLM judge (OpenRouter) [{'ON' if cur_judge else 'OFF'}]")
+    print(f"  3) LLM Judge [{'ON' if cur_judge else 'OFF'}]")
     s = input("> ").strip()
     if s:
-        sel = _parse_multi_select(s, 4)
+        sel = _parse_multi_select(s, 3)
         cfg["USE_REGEX"] = 1 in sel
         cfg["USE_STEMMING"] = 2 in sel
-        cfg["USE_EMBEDDINGS"] = 3 in sel
-        cfg["USE_LLM_JUDGE"] = 4 in sel
+        cfg["USE_LLM_JUDGE"] = 3 in sel
     # Precedence rule: stemming overrides regex in implementation
     if cfg.get("USE_STEMMING", False) and cfg.get("USE_REGEX", False):
         print("[note] Stemming takes precedence over Regex; disabling Regex.")
@@ -93,11 +90,10 @@ def configure_scoring_menu():
 
     # If LLM judge is enabled, it takes precedence over all others
     if cfg.get("USE_LLM_JUDGE", False):
-        if cur_regex or cur_stem or cur_emb:
-            print("[note] LLM judge overrides heuristic scoring; disabling Regex/Stemming/Embeddings.")
+        if cur_regex or cur_stem:
+            print("[note] LLM judge overrides heuristic scoring; disabling Regex/Stemming.")
         cfg["USE_REGEX"] = False
         cfg["USE_STEMMING"] = False
-        cfg["USE_EMBEDDINGS"] = False
 
         # Configure judge model and params
         if not os.getenv("OPENROUTER_API_KEY"):
@@ -128,84 +124,15 @@ def configure_scoring_menu():
         except Exception:
             cfg["LLM_JUDGE_MAX_TOKENS"] = max_toks_default
 
-    if cfg.get("USE_EMBEDDINGS", False):
-        # Provider selection in one step
-        provider_default = cfg.get("EMBEDDINGS_PROVIDER", "sentence_transformers")
-        provider = ask_choice(
-            "Embeddings provider",
-            ["mistral", "sentence_transformers"],
-            provider_default,
-        )
-        cfg["EMBEDDINGS_PROVIDER"] = provider
-
-        if provider == "mistral":
-            if not os.getenv("MISTRAL_API_KEY"):
-                print("[warn] MISTRAL_API_KEY not set; embeddings may be skipped.")
-            model_default = cfg.get("MISTRAL_EMBED_MODEL", "mistral-embed")
-            choices = [model_default, "Custom..."]
-            pick = ask_choice("Mistral embed model", choices, model_default)
-            if pick == "Custom...":
-                custom = input("Enter model id: ").strip()
-                if custom:
-                    cfg["MISTRAL_EMBED_MODEL"] = custom
-        else:
-            model_default = cfg.get("SENTENCE_TRANSFORMER_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-            presets = [
-                "sentence-transformers/all-MiniLM-L6-v2",
-                "sentence-transformers/all-mpnet-base-v2",
-                "BAAI/bge-small-en-v1.5",
-                "Custom...",
-            ]
-            default_choice = model_default if model_default in presets else presets[0]
-            pick = ask_choice("SentenceTransformer model", presets, default_choice)
-            if pick == "Custom...":
-                custom = input("Enter model name: ").strip()
-                if custom:
-                    cfg["SENTENCE_TRANSFORMER_MODEL"] = custom
-            else:
-                cfg["SENTENCE_TRANSFORMER_MODEL"] = pick
-
-        # Threshold presets in one go (applies to both agree/disagree)
-        thr_default = float(cfg.get("SEMANTIC_THRESH_AGREE", 0.82))
-        thr_presets = [0.75, 0.80, 0.82, 0.85, 0.90]
-        thr_labels = [*(str(x) for x in thr_presets), "Custom..."]
-        default_label = str(thr_default) if thr_default in thr_presets else str(thr_presets[2])
-        pick = ask_choice("Semantic threshold for agree/disagree", thr_labels, default_label)
-        if pick == "Custom...":
-            val = ask_float("Enter custom threshold (0-1)", thr_default)
-            cfg["SEMANTIC_THRESH_AGREE"] = float(val)
-            cfg["SEMANTIC_THRESH_DISAGREE"] = float(val)
-        else:
-            val = float(pick)
-            cfg["SEMANTIC_THRESH_AGREE"] = val
-            cfg["SEMANTIC_THRESH_DISAGREE"] = val
-
-        # Separate threshold for EVASION (can differ from agree/disagree)
-        thr_ev_default = float(cfg.get("SEMANTIC_THRESH_EVASION", cfg.get("SEMANTIC_THRESH_AGREE", 0.82)))
-        ev_presets = [0.75, 0.80, 0.82, 0.85, 0.90]
-        ev_labels = [*(str(x) for x in ev_presets), "Custom..."]
-        ev_default_label = str(thr_ev_default) if thr_ev_default in ev_presets else str(ev_presets[2])
-        ev_pick = ask_choice("Semantic threshold for evasion", ev_labels, ev_default_label)
-        if ev_pick == "Custom...":
-            ev_val = ask_float("Enter custom threshold (0-1)", thr_ev_default)
-            cfg["SEMANTIC_THRESH_EVASION"] = float(ev_val)
-        else:
-            cfg["SEMANTIC_THRESH_EVASION"] = float(ev_pick)
+    # Embedding configuration removed
 
     print("\nSelected scoring config:")
     print({
         k: SCORING_CONFIG[k]
         for k in [
             "USE_REGEX",
-            "USE_STEMMING",
-            "USE_EMBEDDINGS",
+            "USE_STEMMING", 
             "USE_LLM_JUDGE",
-            "EMBEDDINGS_PROVIDER",
-            "SENTENCE_TRANSFORMER_MODEL",
-            "MISTRAL_EMBED_MODEL",
-            "SEMANTIC_THRESH_AGREE",
-            "SEMANTIC_THRESH_DISAGREE",
-            "SEMANTIC_THRESH_EVASION",
             "LLM_JUDGE_MODEL",
             "LLM_JUDGE_TEMPERATURE",
             "LLM_JUDGE_MAX_TOKENS",
