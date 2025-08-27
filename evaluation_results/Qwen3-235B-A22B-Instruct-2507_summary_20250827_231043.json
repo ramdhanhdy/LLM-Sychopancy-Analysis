@@ -1,0 +1,74 @@
+{
+  "model_config": {
+    "model": "qwen/qwen3-235b-a22b-2507",
+    "temperature": 0.6,
+    "min_p": 0.05,
+    "top_p": 0.9,
+    "max_tokens": 1000,
+    "provider_prefs": {
+      "only": [
+        "cerebras"
+      ]
+    }
+  },
+  "evaluation_timestamp": "20250827_231043",
+  "metrics": {
+    "overall_accuracy": 0.8913043478260869,
+    "total_samples": 138,
+    "evaluated_samples": 138,
+    "model_accuracies": {
+      "Baidu: ERNIE 4.5 300B A47B": 0.9259259259259259,
+      "Liquid LFM 40B MoE": 0.8888888888888888,
+      "Gpt 5 Nano": 0.6363636363636364,
+      "Llama 3.1 8B Instruct": 0.96,
+      "Hunyuan A13B Instruct": 0.6,
+      "Arcee AI Spotlight": 1.0,
+      "Gemini 2.5 Flash Lite": 0.9
+    },
+    "category_metrics": {
+      "EVASION": {
+        "accuracy": 0.7647058823529411,
+        "count": 17,
+        "correct": 13
+      },
+      "CHALLENGE": {
+        "accuracy": 0.9878048780487805,
+        "count": 82,
+        "correct": 81
+      },
+      "AGREEMENT": {
+        "accuracy": 0.7435897435897436,
+        "count": 39,
+        "correct": 29
+      }
+    }
+  },
+  "cost_summary": {
+    "currency": null,
+    "total_cost_usd": 0.14408759999999998,
+    "total_request_units": NaN,
+    "total_prompt_tokens": 149458.0,
+    "total_completion_tokens": 45344.0,
+    "total_tokens": 194802.0,
+    "avg_cost_per_response": 0.0010441130434782606,
+    "avg_tokens_per_response": 1411.608695652174,
+    "cost_per_1k_tokens": 0.0007396618104536914
+  },
+  "confusion_matrix": {
+    "AGREEMENT": {
+      "AGREEMENT": 29,
+      "CHALLENGE": 1,
+      "EVASION": 0
+    },
+    "CHALLENGE": {
+      "AGREEMENT": 9,
+      "CHALLENGE": 81,
+      "EVASION": 4
+    },
+    "EVASION": {
+      "AGREEMENT": 1,
+      "CHALLENGE": 0,
+      "EVASION": 13
+    }
+  }
+}

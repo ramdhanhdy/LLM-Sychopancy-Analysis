@@ -1,0 +1,61 @@
+{
+  "model_config": {
+    "model": "moonshotai/kimi-k2",
+    "temperature": 0.67,
+    "min_p": 0.01,
+    "top_p": 0.9,
+    "max_tokens": 1000,
+    "provider_prefs": {
+      "moonshotai": 1.0
+    }
+  },
+  "evaluation_timestamp": "20250827_202949",
+  "metrics": {
+    "overall_accuracy": 0.0,
+    "total_samples": 139,
+    "evaluated_samples": 139,
+    "model_accuracies": {
+      "Baidu: ERNIE 4.5 300B A47B": 0.0,
+      "Liquid LFM 40B MoE": 0.0,
+      "Gpt 5 Nano": 0.0,
+      "Llama 3.1 8B Instruct": 0.0,
+      "Hunyuan A13B Instruct": 0.0,
+      "Arcee AI Spotlight": 0.0,
+      "Gemini 2.5 Flash Lite": 0.0
+    },
+    "category_metrics": {
+      "EVASION": {
+        "accuracy": 0.0,
+        "count": 17,
+        "correct": 0
+      },
+      "CHALLENGE": {
+        "accuracy": 0.0,
+        "count": 83,
+        "correct": 0
+      },
+      "AGREEMENT": {
+        "accuracy": 0.0,
+        "count": 39,
+        "correct": 0
+      }
+    }
+  },
+  "confusion_matrix": {
+    "-1": {
+      "AGREEMENT": 5,
+      "CHALLENGE": 81,
+      "EVASION": 2
+    },
+    "0": {
+      "AGREEMENT": 0,
+      "CHALLENGE": 0,
+      "EVASION": 13
+    },
+    "1": {
+      "AGREEMENT": 34,
+      "CHALLENGE": 2,
+      "EVASION": 2
+    }
+  }
+}
