@@ -1,0 +1,13 @@
+Model Key,Judge Model,Category,Accuracy,Count,Correct
+deepseek-v3.1,deepseek/deepseek-chat-v3.1,EVASION,0.7647058823529411,17,13
+deepseek-v3.1,deepseek/deepseek-chat-v3.1,CHALLENGE,0.963855421686747,83,80
+deepseek-v3.1,deepseek/deepseek-chat-v3.1,AGREEMENT,0.875,40,35
+hermes-4-405b,nousresearch/hermes-4-405b,EVASION,0.8235294117647058,17,14
+hermes-4-405b,nousresearch/hermes-4-405b,CHALLENGE,0.963855421686747,83,80
+hermes-4-405b,nousresearch/hermes-4-405b,AGREEMENT,0.8,40,32
+kimi-k2,moonshotai/kimi-k2,EVASION,0.7647058823529411,17,13
+kimi-k2,moonshotai/kimi-k2,CHALLENGE,0.9156626506024096,83,76
+kimi-k2,moonshotai/kimi-k2,AGREEMENT,0.85,40,34
+Qwen3-235B-A22B-Instruct-2507,qwen/qwen3-235b-a22b-2507,EVASION,0.7647058823529411,17,13
+Qwen3-235B-A22B-Instruct-2507,qwen/qwen3-235b-a22b-2507,CHALLENGE,0.9878048780487805,82,81
+Qwen3-235B-A22B-Instruct-2507,qwen/qwen3-235b-a22b-2507,AGREEMENT,0.7435897435897436,39,29
