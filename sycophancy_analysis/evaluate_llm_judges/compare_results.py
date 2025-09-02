@@ -1,5 +1,7 @@
 import os, json, glob
 import pandas as pd
+import numpy as np
+from math import comb
 import argparse
 from typing import Dict, List
 import matplotlib.pyplot as plt
@@ -38,6 +40,17 @@ def setup_argparse():
         "--create-plots", 
         action="store_true",
         help="Generate comparison visualizations"
+    )
+    parser.add_argument(
+        "--mcnemar", 
+        nargs=2,
+        metavar=("MODEL_A", "MODEL_B"),
+        help="Run McNemar's test comparing MODEL_A vs MODEL_B on paired rows"
+    )
+    parser.add_argument(
+        "--mcnemar-top2",
+        action="store_true",
+        help="Run McNemar's test for the top two models by Overall Accuracy"
     )
     return parser
 
@@ -88,6 +101,89 @@ def load_results(model_files: Dict[str, str]) -> Dict[str, Dict]:
             print(f"Error loading {filepath}: {e}")
     
     return results
+
+def find_latest_detailed(results_dir: str, model_keys: List[str] = None) -> Dict[str, str]:
+    """Find latest detailed CSV per model (for paired row comparisons)."""
+    detailed_pattern = os.path.join(results_dir, "*_detailed_scores_*.csv")
+    csv_files = glob.glob(detailed_pattern)
+    latest: Dict[str, tuple[str, str]] = {}
+    for path in csv_files:
+        filename = os.path.basename(path)
+        if "_detailed_scores_" not in filename:
+            continue
+        model_key, ts = filename.split("_detailed_scores_")
+        ts = ts.rsplit(".", 1)[0]
+        if model_keys is not None and model_key not in model_keys:
+            continue
+        if (model_key not in latest) or (ts > latest[model_key][1]):
+            latest[model_key] = (path, ts)
+    return {k: v[0] for k, v in latest.items()}
+
+def _map_human_to_int(series: pd.Series) -> pd.Series:
+    """Map human_eval string labels to fixed integers: AGREEMENT=1, CHALLENGE=-1, EVASION=0"""
+    mapping = {"AGREEMENT": 1, "CHALLENGE": -1, "EVASION": 0}
+    return series.map(mapping)
+
+def mcnemar_pvalue(y_true: np.ndarray, y_pred_a: np.ndarray, y_pred_b: np.ndarray) -> float:
+    """Two-sided exact McNemar p-value with p=0.5; no external libs.
+
+    y_true, y_pred_* should be 1D arrays of the same length with comparable label encodings.
+    """
+    a_correct = (y_true == y_pred_a)
+    b_correct = (y_true == y_pred_b)
+    b_cnt = int((~a_correct & b_correct).sum())  # A wrong, B right
+    c_cnt = int((a_correct & ~b_correct).sum())  # A right, B wrong
+    n = b_cnt + c_cnt
+    if n == 0:
+        return 1.0
+    k = min(b_cnt, c_cnt)
+    # exact two-sided under Binomial(n, 0.5)
+    p = 2 * sum(comb(n, i) * (0.5 ** n) for i in range(0, k + 1))
+    return min(1.0, float(p))
+
+def run_mcnemar_on_models(results_dir: str, model_a: str, model_b: str) -> None:
+    """Load latest detailed CSVs for two models, align by prompt_id, and print McNemar p-value."""
+    latest = find_latest_detailed(results_dir, [model_a, model_b])
+    missing = [m for m in (model_a, model_b) if m not in latest]
+    if missing:
+        print(f"Missing detailed CSVs for: {', '.join(missing)}")
+        return
+
+    dfA = pd.read_csv(latest[model_a])
+    dfB = pd.read_csv(latest[model_b])
+
+    # Ensure required columns
+    for name, df in ((model_a, dfA), (model_b, dfB)):
+        if not {"prompt_id", "human_eval", "pred_label"}.issubset(df.columns):
+            print(f"Detailed CSV for {name} missing required columns.")
+            return
+
+    # Align by prompt_id (paired comparison)
+    merged = dfA[["prompt_id", "human_eval", "pred_label"]].merge(
+        dfB[["prompt_id", "human_eval", "pred_label"]], on="prompt_id", suffixes=("_A", "_B")
+    )
+    # Keep only rows with valid human_eval & predictions
+    merged = merged.dropna(subset=["human_eval_A", "pred_label_A", "human_eval_B", "pred_label_B"]) 
+
+    # Sanity: filter to rows where human_eval agrees across files (should always match)
+    merged = merged[merged["human_eval_A"] == merged["human_eval_B"]]
+    if merged.empty:
+        print("No paired rows found after alignment.")
+        return
+
+    y_true = _map_human_to_int(merged["human_eval_A"]).to_numpy()
+    y_pred_a = merged["pred_label_A"].to_numpy()
+    y_pred_b = merged["pred_label_B"].to_numpy()
+
+    # Compute p-value and discordant counts
+    a_correct = (y_true == y_pred_a)
+    b_correct = (y_true == y_pred_b)
+    b_cnt = int((~a_correct & b_correct).sum())
+    c_cnt = int((a_correct & ~b_correct).sum())
+    pval = mcnemar_pvalue(y_true, y_pred_a, y_pred_b)
+
+    print(f"\nMcNemar p-value ({model_a} vs {model_b}) on {len(merged)} paired rows: {pval:.4g}")
+    print(f"Discordant pairs -> A wrong/B right: {b_cnt}, A right/B wrong: {c_cnt}")
 
 def create_comparison_summary(results: Dict[str, Dict]) -> pd.DataFrame:
     """Create a summary comparison DataFrame"""
@@ -363,6 +459,17 @@ def main():
         detailed_df.to_csv(detailed_path, index=False)
         print(f"Saved detailed comparison: {detailed_filename}")
     
+    # Optional: McNemar's test
+    if args.mcnemar:
+        A, B = args.mcnemar
+        run_mcnemar_on_models(args.results_dir, A, B)
+    elif args.mcnemar_top2 and not summary_df.empty:
+        # Choose top two by Overall Accuracy
+        ordered = summary_df.sort_values("Overall Accuracy", ascending=False)["Model Key"].tolist()
+        if len(ordered) >= 2:
+            A, B = ordered[:2]
+            run_mcnemar_on_models(args.results_dir, A, B)
+
     # Create visualizations if requested
     if args.create_plots:
         print(f"\nCreating visualizations...")

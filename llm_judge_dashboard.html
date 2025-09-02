@@ -65,6 +65,7 @@
         /* Distinct shades per section */
         #judge-performance.section-header { background: #401F0D; /* Judge Performance */ }
         #prompt-battery.section-header { background: #59540A; /* Prompt Battery Explorer */ }
+        #final-results.section-header { background: #0b3d3a; /* Final Results main */ }
         
         .section-header::before {
             content: '';
@@ -458,6 +459,8 @@
             <p>Evaluating judge models' scoring behavior across prompt batteries</p>
         </div>
         
+        
+        
         <!-- Judge Model Performance Section -->
         <div class="section-header" id="judge-performance" role="heading" aria-level="2">Judge Model Performance</div>
         <p class="section-description" id="judge-performance-desc">
@@ -465,14 +468,7 @@
             accuracy and accuracy within key categories (challenge, agreement, evasion). Bars represent percentage
             accuracy; higher is better.
         </p>
-        <div class="controls" id="performanceControls" aria-label="Performance Controls">
-            <div class="control-group">
-                <label for="modelSelect">Judge Model:</label>
-                <select id="modelSelect">
-                    <option value="">All Judges</option>
-                </select>
-            </div>
-        </div>
+        <!-- Removed judge model filter controls (no longer needed) -->
         
         <div class="dashboard-grid">
             <div class="card">
@@ -487,70 +483,66 @@
             </div>
 
             <div class="card">
+                <div class="card-header">🧪 Pairwise Significance (McNemar)</div>
+                <div class="card-content">
+                    <p class="section-description">
+                        Test whether two judge models differ significantly on the same prompts. Uses McNemar's exact two-sided test on paired correctness.
+                    </p>
+                    <div class="controls" aria-label="McNemar Controls">
+                        <div class="control-group">
+                            <label for="mcnemarModelA">Model A:</label>
+                            <select id="mcnemarModelA"></select>
+                        </div>
+                        <div class="control-group">
+                            <label for="mcnemarModelB">Model B:</label>
+                            <select id="mcnemarModelB"></select>
+                        </div>
+                        <div class="control-group" style="align-self: flex-end;">
+                            <button id="mcnemarRunBtn" style="padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 8px; background:#0f172a; color:#f8fafc; cursor:pointer;">Run Test</button>
+                        </div>
+                    </div>
+                    <div id="mcnemarResult" class="section-description" style="margin-top: 8px;"></div>
+                </div>
+            </div>
+
+            <div class="card">
                 <div class="card-header">💲 Cost and Usage (per model)</div>
                 <div class="card-content">
                     <p class="section-description">
                         Aggregated token usage and estimated costs computed from the evaluation run summaries.
                         Use this to understand efficiency across judge models.
                     </p>
+                    <div class="cost-usage-charts" style="margin-bottom: 16px;">
+                        <div style="height: 280px;">
+                            <canvas id="costPerModelChart" aria-label="Total cost per model" role="img"></canvas>
+                        </div>
+                        <div style="height: 280px; margin-top: 20px;">
+                            <canvas id="tokensPerModelChart" aria-label="Prompt vs completion tokens per model" role="img"></canvas>
+                        </div>
+                    </div>
                     <div id="costUsageTable"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">⚖️ Cost vs Performance</div>
+                <div class="card-content">
+                    <p class="section-description">
+                        Trade-off between model cost and overall judging accuracy. Each point is a model.
+                        X-axis shows cost efficiency; Y-axis shows accuracy. Bubble size reflects total tokens.
+                    </p>
+                    <div style="height: 320px;">
+                        <canvas id="costPerformanceChart" aria-label="Cost versus performance scatter" role="img"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
         
-        <!-- Prompt Battery Explorer Section -->
-        <div class="section-header" id="prompt-battery" role="heading" aria-level="2">Prompt Battery Explorer</div>
-        <p class="section-description" id="prompt-battery-desc">
-            Explore prompts designed to test sycophantic behavior in LLMs. Each prompt is crafted to elicit agreement or validation from models, 
-            revealing their tendency to be overly agreeable rather than providing balanced, critical responses. Click any prompt to expand 
-            and view judge model scores when available.
-        </p>
-        <div class="section-description" style="background: #f8fafc; padding: 16px; border-radius: 8px; border-left: 4px solid #3b82f6; margin-bottom: 16px;">
-            <strong>Visual Indicators Guide:</strong><br>
-            🔴 <strong>Harmful Content</strong> - Tests model's willingness to validate dangerous or problematic viewpoints<br>
-            🟢 <strong>Safe Content</strong> - Tests sycophantic behavior on benign topics like preferences or opinions<br>
-            👹 <strong>Devil's Advocate</strong> - Explicitly instructs model to challenge the user's position first<br>
-            📈 <strong>High Strength</strong> - Strong, confident assertions that maximally test sycophantic resistance<br>
-            📊 <strong>Medium Strength</strong> - Moderate assertions creating balanced testing conditions<br>
-            📉 <strong>Low Strength</strong> - Tentative phrasing that may naturally invite agreement<br>
-            👍 <strong>Positive Stance</strong> - User supports the topic, testing if model reinforces this position<br>
-            👎 <strong>Negative Stance</strong> - User opposes the topic, testing if model validates contrary views
-        </div>
-        <div class="controls" id="promptControls" aria-label="Prompt Filters">
-            <div class="control-group">
-                <label for="topicFilter">Topic:</label>
-                <select id="topicFilter">
-                    <option value="">All Topics</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label for="stanceFilter">Stance:</label>
-                <select id="stanceFilter">
-                    <option value="">All Stances</option>
-                    <option value="1">Positive</option>
-                    <option value="-1">Negative</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label for="strengthFilter">Strength:</label>
-                <select id="strengthFilter">
-                    <option value="">All Strengths</option>
-                    <option value="0.2">Low (0.2)</option>
-                    <option value="0.5">Medium (0.5)</option>
-                    <option value="0.8">High (0.8)</option>
-                </select>
-            </div>
-            <div class="control-group">
-                <label for="searchInput">Search:</label>
-                <input type="text" id="searchInput" placeholder="Search prompts...">
-            </div>
-        </div>
-        <div id="promptBatteries">
-            <div class="loading">Loading prompt batteries...</div>
-        </div>
+        
     </div>
 
     <script>
+        
         class LLMJudgeDashboard {
             constructor() {
                 this.promptBattery = [];
@@ -573,11 +565,7 @@
             }
             
             async loadData() {
-                // Load prompt battery
-                const batteryResponse = await fetch('/api/prompt_battery');
-                this.promptBattery = await batteryResponse.json();
-                
-                // Load evaluation results
+                // Load evaluation-only data for this page
                 await this.loadEvaluationResults();
             }
             
@@ -595,9 +583,19 @@
                     await Promise.all(
                         modelNames.map(async (model) => {
                             try {
+                                console.log(`Loading detailed results for model: ${model}`);
                                 const res = await fetch(`/api/evaluation_results/${encodeURIComponent(model)}`);
-                                if (!res.ok) return;
+                                if (!res.ok) {
+                                    console.warn(`Failed to fetch detailed results for ${model}: ${res.status} ${res.statusText}`);
+                                    return;
+                                }
                                 const full = await res.json();
+                                console.log(`Loaded detailed results for ${model}:`, {
+                                    hasDetailed: !!full.detailed,
+                                    detailedLength: full.detailed?.length || 0,
+                                    hasSummary: !!full.summary
+                                });
+                                
                                 if (!this.evaluationResults[model]) this.evaluationResults[model] = {};
                                 this.evaluationResults[model].detailed = full.detailed || [];
                                 // Prefer backend summary if provided
@@ -605,7 +603,7 @@
                                     this.evaluationResults[model].summary = full.summary;
                                 }
                             } catch (e) {
-                                console.warn('Failed loading detailed for model', model, e);
+                                console.error('Failed loading detailed for model', model, e);
                             }
                         })
                     );
@@ -616,57 +614,164 @@
             }
             
             setupEventListeners() {
-                document.getElementById('modelSelect').addEventListener('change', () => this.applyFilters());
-                document.getElementById('topicFilter').addEventListener('change', () => this.applyFilters());
-                document.getElementById('stanceFilter').addEventListener('change', () => this.applyFilters());
-                document.getElementById('strengthFilter').addEventListener('change', () => this.applyFilters());
-                document.getElementById('searchInput').addEventListener('input', () => this.applyFilters());
+                // Removed modelSelect listener since judge model filters were removed
+                const t = document.getElementById('topicFilter');
+                const s = document.getElementById('stanceFilter');
+                const st = document.getElementById('strengthFilter');
+                const q = document.getElementById('searchInput');
+                if (t) t.addEventListener('change', () => this.applyFilters());
+                if (s) s.addEventListener('change', () => this.applyFilters());
+                if (st) st.addEventListener('change', () => this.applyFilters());
+                if (q) q.addEventListener('input', () => this.applyFilters());
+                // McNemar interactions
+                const selA = document.getElementById('mcnemarModelA');
+                const selB = document.getElementById('mcnemarModelB');
+                const btn = document.getElementById('mcnemarRunBtn');
+                const maybeRun = () => {
+                    const out = document.getElementById('mcnemarResult');
+                    const A = selA?.value, B = selB?.value;
+                    if (!A || !B) {
+                        if (out) out.textContent = 'Select two models to run the test.';
+                        return;
+                    }
+                    if (A === B) {
+                        if (out) out.textContent = 'Pick two distinct models.';
+                        return;
+                    }
+                    this.runMcnemar(A, B);
+                };
+                if (selA) selA.addEventListener('change', maybeRun);
+                if (selB) selB.addEventListener('change', maybeRun);
+                if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); maybeRun(); });
             }
             
             populateFilters() {
                 // Populate topic filter
                 const topics = [...new Set(this.promptBattery.map(p => p.topic))];
                 const topicSelect = document.getElementById('topicFilter');
-                topics.forEach(topic => {
-                    const option = document.createElement('option');
-                    option.value = topic;
-                    option.textContent = topic.charAt(0).toUpperCase() + topic.slice(1);
-                    topicSelect.appendChild(option);
-                });
+                if (topicSelect) {
+                    topics.forEach(topic => {
+                        const option = document.createElement('option');
+                        option.value = topic;
+                        option.textContent = topic.charAt(0).toUpperCase() + topic.slice(1);
+                        topicSelect.appendChild(option);
+                    });
+                }
                 
-                // Populate model filter
+                // Populate McNemar model selectors with available models
                 const models = Object.keys(this.evaluationResults);
-                const modelSelect = document.getElementById('modelSelect');
-                models.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model;
-                    option.textContent = model;
-                    modelSelect.appendChild(option);
-                });
+                const selA = document.getElementById('mcnemarModelA');
+                const selB = document.getElementById('mcnemarModelB');
+                if (selA && selB) {
+                    selA.innerHTML = '';
+                    selB.innerHTML = '';
+                    models.forEach(model => {
+                        const optA = document.createElement('option');
+                        optA.value = model; optA.textContent = model; selA.appendChild(optA);
+                        const optB = document.createElement('option');
+                        optB.value = model; optB.textContent = model; selB.appendChild(optB);
+                    });
+                    // Preselect top-2 by overall accuracy if available, then auto-run
+                    const ranked = models
+                        .map(m => ({ m, acc: (this.evaluationResults[m]?.summary?.metrics?.overall_accuracy) ?? 0 }))
+                        .sort((a,b) => (b.acc - a.acc));
+                    const out = document.getElementById('mcnemarResult');
+                    if (ranked.length >= 2) {
+                        selA.value = ranked[0].m;
+                        selB.value = ranked[1].m;
+                        this.runMcnemar(selA.value, selB.value);
+                    } else if (out) {
+                        out.textContent = 'Need at least two models with results to run McNemar.';
+                    }
+                }
             }
             
-            applyFilters() {
-                const modelFilter = document.getElementById('modelSelect').value;
-                const topicFilter = document.getElementById('topicFilter').value;
-                const stanceFilter = document.getElementById('stanceFilter').value;
-                const strengthFilter = document.getElementById('strengthFilter').value;
-                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-                
-                this.filteredData = this.promptBattery.filter(prompt => {
-                    if (topicFilter && prompt.topic !== topicFilter) return false;
-                    if (stanceFilter && prompt.stance.toString() !== stanceFilter) return false;
-                    if (strengthFilter && prompt.strength.toString() !== strengthFilter) return false;
-                    if (searchTerm && !prompt.text.toLowerCase().includes(searchTerm)) return false;
-                    return true;
-                });
-                
-                this.renderPromptBatteries();
-            }
+            applyFilters() { /* no-op on judge-only page */ }
             
             renderDashboard() {
                 this.renderModelScoresTable();
                 this.renderCostUsageTable();
-                this.applyFilters();
+                this.renderCostUsageCharts();
+                this.renderCostPerformanceChart();
+            }
+
+            // --- McNemar utilities and runner ---
+            labelToInt(lbl) {
+                if (lbl === 'AGREEMENT') return 1;
+                if (lbl === 'CHALLENGE') return -1;
+                if (lbl === 'EVASION') return 0;
+                return null;
+            }
+
+            // Two-sided exact McNemar p-value using Binomial(n, 0.5)
+            mcnemarPValue(bCnt, cCnt) {
+                const n = bCnt + cCnt;
+                if (n === 0) return 1.0;
+                const k = Math.min(bCnt, cCnt);
+                // Prob(X=i) for X~Bin(n, 0.5): start at i=0 with 0.5^n and iterate
+                const halfPowN = Math.pow(0.5, n);
+                let prob = halfPowN; // i=0
+                let sumLower = prob;
+                for (let i = 0; i < k; i++) {
+                    prob = prob * (n - i) / (i + 1);
+                    sumLower += prob;
+                }
+                return Math.min(1, 2 * sumLower);
+            }
+
+            runMcnemar(modelA, modelB) {
+                const resA = this.evaluationResults[modelA];
+                const resB = this.evaluationResults[modelB];
+                const out = document.getElementById('mcnemarResult');
+                
+                // Enhanced debugging
+                console.log('McNemar test - Model A:', modelA, 'exists:', !!resA);
+                console.log('McNemar test - Model B:', modelB, 'exists:', !!resB);
+                if (resA) console.log('Model A has detailed:', !!resA.detailed, 'length:', resA.detailed?.length);
+                if (resB) console.log('Model B has detailed:', !!resB.detailed, 'length:', resB.detailed?.length);
+                
+                if (!resA || !resB) {
+                    if (out) out.textContent = `Missing evaluation results for ${!resA ? modelA : modelB}.`;
+                    return;
+                }
+                
+                if (!resA.detailed || !resB.detailed) {
+                    if (out) out.textContent = `Detailed results not available for ${!resA.detailed ? modelA : modelB}. Try refreshing the page.`;
+                    return;
+                }
+                const mapA = new Map(resA.detailed.map(r => [r.prompt_id, r]));
+                const mapB = new Map(resB.detailed.map(r => [r.prompt_id, r]));
+                const promptIds = [...mapA.keys()].filter(id => mapB.has(id));
+                if (promptIds.length === 0) {
+                    if (out) out.textContent = 'No paired prompts found for selected models.';
+                    return;
+                }
+                let bCnt = 0, cCnt = 0, pairs = 0;
+                for (const pid of promptIds) {
+                    const a = mapA.get(pid);
+                    const b = mapB.get(pid);
+                    const yTrue = this.labelToInt(a.human_eval);
+                    if (yTrue === null) continue;
+                    const aCorrect = (yTrue === a.pred_label);
+                    const bCorrect = (yTrue === b.pred_label);
+                    if (aCorrect !== bCorrect) {
+                        if (!aCorrect && bCorrect) bCnt++;
+                        if (aCorrect && !bCorrect) cCnt++;
+                    }
+                    pairs++;
+                }
+                const pval = this.mcnemarPValue(bCnt, cCnt);
+                const sig05 = pval < 0.05 ? 'yes' : 'no';
+                const sig01 = pval < 0.01 ? 'yes' : 'no';
+                if (out) {
+                    out.innerHTML = `
+                        <div><strong>Models:</strong> ${modelA} vs ${modelB}</div>
+                        <div><strong>Paired rows:</strong> ${pairs}</div>
+                        <div><strong>Discordant pairs:</strong> b = A wrong/B right = ${bCnt}, c = A right/B wrong = ${cCnt}</div>
+                        <div><strong>McNemar p-value (two-sided exact):</strong> ${pval.toFixed(4)}</div>
+                        <div><strong>Significant?</strong> alpha=0.05: ${sig05}, alpha=0.01: ${sig01}</div>
+                    `;
+                }
             }
             
             renderModelScoresTable() {
@@ -805,6 +910,116 @@
 
                 container.innerHTML = tableHTML;
             }
+
+            renderCostUsageCharts() {
+                const costCanvas = document.getElementById('costPerModelChart');
+                const tokensCanvas = document.getElementById('tokensPerModelChart');
+                if (!costCanvas || !tokensCanvas) return;
+
+                const models = Object.keys(this.evaluationResults);
+                if (models.length === 0) {
+                    const parent = costCanvas.parentElement;
+                    if (parent) parent.innerHTML = '<p class="text-gray-500">No cost/usage data available</p>';
+                    return;
+                }
+
+                const entries = models.map(model => {
+                    const cs = (this.evaluationResults[model].summary && this.evaluationResults[model].summary.cost_summary) || {};
+                    return {
+                        model,
+                        totalCost: cs.total_cost_usd ?? 0,
+                        totalTokens: cs.total_tokens ?? 0,
+                        promptTokens: cs.total_prompt_tokens ?? 0,
+                        completionTokens: cs.total_completion_tokens ?? 0,
+                        costPerK: cs.cost_per_1k_tokens ?? 0,
+                        avgCost: cs.avg_cost_per_response ?? 0,
+                        avgTokens: cs.avg_tokens_per_response ?? 0,
+                    };
+                });
+
+                // Sort by total cost desc for readability
+                entries.sort((a, b) => (b.totalCost || 0) - (a.totalCost || 0));
+
+                const labels = entries.map(e => e.model);
+                const totalCosts = entries.map(e => e.totalCost ?? 0);
+                const promptTokens = entries.map(e => e.promptTokens ?? 0);
+                const completionTokens = entries.map(e => e.completionTokens ?? 0);
+
+                // Track charts to avoid duplicates if re-rendered
+                this._charts = this._charts || {};
+                if (this._charts.costChart) { try { this._charts.costChart.destroy(); } catch (_) {} }
+                if (this._charts.tokensChart) { try { this._charts.tokensChart.destroy(); } catch (_) {} }
+
+                this._charts.costChart = new Chart(costCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [{
+                            label: 'Total Cost (USD)',
+                            data: totalCosts,
+                            backgroundColor: '#3b82f6',
+                            borderRadius: 6,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#f3f4f6' },
+                                ticks: { color: '#6b7280' }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#6b7280' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+
+                this._charts.tokensChart = new Chart(tokensCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                label: 'Prompt Tokens',
+                                data: promptTokens,
+                                backgroundColor: '#93c5fd'
+                            },
+                            {
+                                label: 'Completion Tokens',
+                                data: completionTokens,
+                                backgroundColor: '#60a5fa'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                stacked: true,
+                                grid: { color: '#f3f4f6' },
+                                ticks: { color: '#6b7280' }
+                            },
+                            x: {
+                                stacked: true,
+                                grid: { display: false },
+                                ticks: { color: '#6b7280' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: true }
+                        }
+                    }
+                });
+            }
             
             renderCategoryChart() {
                 const categoryCtx = document.getElementById('categoryChart').getContext('2d');
@@ -873,51 +1088,108 @@
                     }
                 });
             }
-            
-            renderPromptBatteries() {
-                const container = document.getElementById('promptBatteries');
-                
-                if (this.filteredData.length === 0) {
-                    container.innerHTML = '<div class="loading">No prompts match the current filters.</div>';
+
+            renderCostPerformanceChart() {
+                const canvas = document.getElementById('costPerformanceChart');
+                if (!canvas) return;
+
+                const models = Object.keys(this.evaluationResults);
+                if (models.length === 0) {
+                    canvas.parentElement.innerHTML = '<p class="text-gray-500">No data available</p>';
                     return;
                 }
-                
-                // Group by topic
-                const groupedByTopic = this.filteredData.reduce((acc, prompt) => {
-                    if (!acc[prompt.topic]) acc[prompt.topic] = [];
-                    acc[prompt.topic].push(prompt);
-                    return acc;
-                }, {});
-                
-                container.innerHTML = '';
-                
-                Object.entries(groupedByTopic).forEach(([topic, prompts]) => {
-                    const batteryDiv = document.createElement('div');
-                    batteryDiv.className = 'prompt-battery';
-                    
-                    const harmfulCount = prompts.filter(p => p.is_harmful).length;
-                    const devilCount = prompts.filter(p => p.ask_devil).length;
-                    
-                    batteryDiv.innerHTML = `
-                        <div class="battery-header">
-                            <div class="battery-title">${topic.charAt(0).toUpperCase() + topic.slice(1)} Battery</div>
-                            <div class="battery-stats">
-                                <div class="stat-item">${prompts.length} prompts</div>
-                                <div class="stat-item">${harmfulCount} harmful</div>
-                                <div class="stat-item">${devilCount} devil's advocate</div>
-                            </div>
-                        </div>
-                        <div class="prompt-list">
-                            ${this.renderPromptList(prompts)}
-                        </div>
-                    `;
-                    
-                    container.appendChild(batteryDiv);
+
+                // Build points: x = cost per 1k tokens (USD), y = overall accuracy (%), r = bubble size by total tokens
+                const points = models.map(model => {
+                    const summary = this.evaluationResults[model].summary || {};
+                    const metrics = summary.metrics || {};
+                    const cs = summary.cost_summary || {};
+                    return {
+                        model,
+                        x: cs.cost_per_1k_tokens ?? null,
+                        y: (metrics.overall_accuracy ?? 0) * 100,
+                        totalTokens: cs.total_tokens ?? 0,
+                        totalCost: cs.total_cost_usd ?? 0
+                    };
+                }).filter(p => p.x !== null && !Number.isNaN(p.x));
+
+                // Determine bubble radius scaling (4..16) by total tokens
+                const minT = Math.min(...points.map(p => p.totalTokens || 0));
+                const maxT = Math.max(...points.map(p => p.totalTokens || 0));
+                const scaleR = (t) => {
+                    if (!maxT || maxT === minT) return 8;
+                    const norm = (t - minT) / (maxT - minT);
+                    return 4 + norm * 12;
+                };
+
+                const data = points.map(p => ({
+                    x: p.x,
+                    y: p.y,
+                    r: scaleR(p.totalTokens),
+                    _label: p.model,
+                    _totalTokens: p.totalTokens,
+                    _totalCost: p.totalCost
+                }));
+
+                // Stable color palette
+                const palette = ['#0ea5e9', '#22c55e', '#ef4444', '#f59e0b', '#8b5cf6', '#14b8a6', '#eab308', '#f97316'];
+                const colorFor = (idx) => palette[idx % palette.length];
+
+                // Destroy previous chart if exists
+                this._charts = this._charts || {};
+                if (this._charts.costPerfChart) { try { this._charts.costPerfChart.destroy(); } catch (_) {} }
+
+                this._charts.costPerfChart = new Chart(canvas.getContext('2d'), {
+                    type: 'bubble',
+                    data: {
+                        datasets: data.map((pt, i) => ({
+                            label: pt._label,
+                            data: [{ x: pt.x, y: pt.y, r: pt.r }],
+                            backgroundColor: colorFor(i),
+                        }))
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => {
+                                        const d = ctx.raw;
+                                        const label = ctx.dataset.label || 'Model';
+                                        return [
+                                            `${label}`,
+                                            `Cost/1k tokens: $${(d.x ?? 0).toFixed(4)}`,
+                                            `Overall accuracy: ${(d.y ?? 0).toFixed(1)}%`,
+                                            `Bubble: total tokens scaled`
+                                        ];
+                                    }
+                                }
+                            },
+                            title: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'Cost per 1k Tokens (USD)' },
+                                grid: { color: '#f3f4f6' },
+                                ticks: { color: '#6b7280' }
+                            },
+                            y: {
+                                title: { display: true, text: 'Overall Accuracy (%)' },
+                                beginAtZero: true,
+                                max: 100,
+                                grid: { color: '#f3f4f6' },
+                                ticks: { color: '#6b7280' }
+                            }
+                        }
+                    }
                 });
-                
-                // Add click handlers for expand/collapse
-                this.setupPromptExpansion();
             }
+            
+            renderPromptBatteries() { /* not rendered on judge-only page */ }
             
             renderPromptList(prompts) {
                 return prompts.map(prompt => {
@@ -1001,69 +1273,12 @@
                 return strength === 0.8 ? 'High' : strength === 0.5 ? 'Medium' : 'Low';
             }
             
-            renderJudgeScores(promptId) {
-                const selectedModel = document.getElementById('modelSelect').value;
-                if (!selectedModel || !this.evaluationResults[selectedModel] || !this.evaluationResults[selectedModel].detailed) {
-                    return '<div class="judge-scores"><div class="judge-scores-title">Judge Scores</div><p style="color: #6b7280; font-size: 0.875rem;">Select a judge model to view scores</p></div>';
-                }
-                
-                const detailed = this.evaluationResults[selectedModel].detailed;
-                const promptScores = detailed.find(item => item.prompt_id === promptId);
-                
-                if (!promptScores) {
-                    return '<div class="judge-scores"><div class="judge-scores-title">Judge Scores</div><p style="color: #6b7280; font-size: 0.875rem;">No scores available for this prompt</p></div>';
-                }
-                
-                return `
-                    <div class="judge-scores">
-                        <div class="judge-scores-title">Judge Scores (${selectedModel})</div>
-                        <div class="judge-scores-grid">
-                            ${promptScores.endorse_stance !== undefined ? `
-                                <div class="judge-score-item">
-                                    <div class="judge-score-label">Endorse</div>
-                                    <div class="judge-score-value">${(promptScores.endorse_stance * 100).toFixed(0)}%</div>
-                                </div>
-                            ` : ''}
-                            ${promptScores.harm_validation !== undefined ? `
-                                <div class="judge-score-item">
-                                    <div class="judge-score-label">Harm</div>
-                                    <div class="judge-score-value">${(promptScores.harm_validation * 100).toFixed(0)}%</div>
-                                </div>
-                            ` : ''}
-                            ${promptScores.challenge_user !== undefined ? `
-                                <div class="judge-score-item">
-                                    <div class="judge-score-label">Challenge</div>
-                                    <div class="judge-score-value">${(promptScores.challenge_user * 100).toFixed(0)}%</div>
-                                </div>
-                            ` : ''}
-                            ${promptScores.flattery !== undefined ? `
-                                <div class="judge-score-item">
-                                    <div class="judge-score-label">Flattery</div>
-                                    <div class="judge-score-value">${(promptScores.flattery * 100).toFixed(0)}%</div>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
+            renderJudgeScores(_promptId) {
+                // Judge model filter removed; suppress per-model judge scores in prompt details
+                return '';
             }
             
-            setupPromptExpansion() {
-                document.querySelectorAll('.prompt-header').forEach(header => {
-                    header.addEventListener('click', (e) => {
-                        const promptItem = header.closest('.prompt-item');
-                        promptItem.classList.toggle('expanded');
-                        
-                        // Re-render judge scores if expanded and model selected
-                        if (promptItem.classList.contains('expanded')) {
-                            const promptId = promptItem.dataset.promptId;
-                            const judgeScoresContainer = promptItem.querySelector('.judge-scores');
-                            if (judgeScoresContainer) {
-                                judgeScoresContainer.outerHTML = this.renderJudgeScores(promptId);
-                            }
-                        }
-                    });
-                });
-            }
+            setupPromptExpansion() { /* not used on judge-only page */ }
             
             showError(message) {
                 const container = document.getElementById('promptBatteries');
