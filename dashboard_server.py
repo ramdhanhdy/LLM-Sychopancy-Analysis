@@ -11,6 +11,8 @@ from flask import Flask, jsonify, send_from_directory, render_template_string, r
 from flask_cors import CORS
 import glob
 from pathlib import Path
+from typing import Optional
+import logging
 
 app = Flask(__name__)
 CORS(app)
@@ -77,8 +79,18 @@ class DashboardDataLoader:
                                 summary_files,
                                 key=lambda p: os.path.basename(p).split('_summary_')[1]
                             )[-1]
-                        except Exception:
-                            selected_summary = summary_files[-1]
+                        except (IndexError, ValueError):
+                            # Handle empty list or malformed filenames
+                            if summary_files:
+                                selected_summary = summary_files[-1]
+                                print(f"Warning: Could not sort summary files by timestamp, using most recent: {selected_summary}")
+                            else:
+                                selected_summary = None
+                                print("Warning: No summary files found")
+                        except Exception as e:
+                            # Log and re-raise unexpected exceptions
+                            print(f"Error selecting summary file: {e}")
+                            raise
 
                 summary_data = {}
                 if selected_summary:
@@ -100,8 +112,21 @@ class DashboardDataLoader:
                     'timestamp': detailed_ts,
                 }
                 
+            except FileNotFoundError as e:
+                print(f"[Loader] File not found: {csv_file} - {e}")
+            except PermissionError as e:
+                print(f"[Loader] Permission denied accessing: {csv_file} - {e}")
+            except UnicodeDecodeError as e:
+                print(f"[Loader] Encoding error reading: {csv_file} - {e}")
+            except pd.errors.EmptyDataError as e:
+                print(f"[Loader] Empty CSV file: {csv_file} - {e}")
+            except pd.errors.ParserError as e:
+                print(f"[Loader] CSV parsing error in: {csv_file} - {e}")
             except Exception as e:
-                print(f"Error loading {csv_file}: {e}")
+                import traceback
+                print(f"[Loader] Unexpected error loading {csv_file}: {e}")
+                traceback.print_exc()
+                raise
         
         return results
     
@@ -154,9 +179,33 @@ class FinalResultsLoader:
             df = pd.read_csv(path)
             df = df.where(pd.notna(df), None)
             return df.to_dict('records')
-        except Exception as e:
-            print(f"[FinalResultsLoader] Error reading {path}: {e}")
+        except FileNotFoundError:
+            # File doesn't exist - handled by path.exists() check above, but include for completeness
             return []
+        except PermissionError as e:
+            import logging
+            logging.getLogger(__name__).error(f"Permission denied reading {path}: {e}")
+            return []
+        except UnicodeDecodeError as e:
+            import logging
+            logging.getLogger(__name__).error(f"Encoding error reading {path}: {e}")
+            return []
+        except pd.errors.EmptyDataError as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Empty CSV file {path}: {e}")
+            return []
+        except pd.errors.ParserError as e:
+            import logging
+            logging.getLogger(__name__).error(f"CSV parsing error in {path}: {e}")
+            return []
+        except json.JSONDecodeError as e:
+            import logging
+            logging.getLogger(__name__).error(f"JSON decode error in {path}: {e}")
+            return []
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception(f"Unexpected error reading {path}: {e}")
+            raise
 
     def sycophancy_scores(self):
         return self._load_csv("sycophancy_scores.csv")
@@ -164,12 +213,16 @@ class FinalResultsLoader:
     def sss_scores(self):
         return self._load_csv("sss_scores.csv")
 
-    def scored_rows(self, limit: int | None = None):
+    def scored_rows(self, limit: Optional[int] = None):
         rows = self._load_csv("scored_rows.csv")
         if limit is not None:
             try:
                 return rows[: int(limit)]
-            except Exception:
+            except (ValueError, TypeError) as e:
+                logging.getLogger(__name__).error(f"Invalid limit parameter: {limit}, error: {e}")
+                return rows
+            except Exception as e:
+                logging.getLogger(__name__).exception(f"Unexpected error processing limit in scored_rows: {limit}")
                 return rows
         return rows
 
@@ -208,7 +261,7 @@ class FinalResultsLoader:
             with open(names_path, 'r', encoding='utf-8') as f:
                 names = json.load(f)
         except Exception as e:
-            print(f"[FinalResultsLoader] Error loading network data: {e}")
+            logging.getLogger(__name__).exception(f"Error loading network data")
             return {"nodes": [], "links": []}
 
         n = len(names)
@@ -239,7 +292,7 @@ class FinalResultsLoader:
                 a, b = (u, v) if u < v else (v, u)
                 mst_edges.add((a, b, w))
         except Exception as e:
-            print(f"[FinalResultsLoader] MST failed: {e}")
+            logging.getLogger(__name__).exception(f"MST failed")
 
         # Combine edges, track kind
         edge_map = {}
@@ -262,7 +315,7 @@ class FinalResultsLoader:
             span = np.where((max_xy - min_xy) == 0, 1.0, (max_xy - min_xy))
             norm = (emb - min_xy) / span
         except Exception as e:
-            print(f"[FinalResultsLoader] UMAP failed, falling back to spring_layout: {e}")
+            logging.getLogger(__name__).exception(f"UMAP failed, falling back to spring_layout")
             pos = nx.spring_layout(nx.Graph(list(edge_map.values())), seed=random_state)
             # pos might be empty if graph construction failed; fallback to grid
             norm = np.zeros((n, 2), dtype=float)
@@ -288,7 +341,7 @@ class FinalResultsLoader:
                 part = la.find_partition(g, la.RBConfigurationVertexPartition, weights='weight', resolution_parameter=1.0)
                 membership = part.membership
             except Exception as e:
-                print(f"[FinalResultsLoader] Leiden failed: {e}")
+                logging.getLogger(__name__).exception(f"Leiden failed")
         else:
             # Simple heuristic: assign all to one community
             membership = [0] * n
@@ -307,7 +360,7 @@ class FinalResultsLoader:
         try:
             from sycophancy_analysis.visualization import analyze_network, plot_network, _symmetrize_clip
         except Exception as e:
-            print(f"[FinalResultsLoader] Import error for visualization pipeline: {e}")
+            logging.getLogger(__name__).exception(f"Import error for visualization pipeline")
             return None
 
         sim_path = self.base_dir / "similarity_matrix.npy"
@@ -525,6 +578,38 @@ if __name__ == '__main__':
     print("Available models:", data_loader.get_model_list())
     print("Available topics:", data_loader.get_topics())
     print("Final results path:", FINAL_RESULTS_DIR)
-    print("\nDashboard will be available at: http://localhost:5000")
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
+
+    # Environment-driven startup configuration
+    def _str_to_bool(val: str) -> bool:
+        return str(val).strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+    env_mode = (os.getenv("ENV") or os.getenv("FLASK_ENV") or "production").strip().lower()
+    debug_env = os.getenv("DEBUG") or os.getenv("FLASK_DEBUG")
+    host_env = os.getenv("HOST")
+    port_env = os.getenv("PORT")
+
+    if debug_env is not None:
+        debug = _str_to_bool(debug_env)
+    else:
+        debug = env_mode in {"development", "dev"}
+
+    host = host_env or ("0.0.0.0" if env_mode in {"development", "dev"} else "127.0.0.1")
+    try:
+        port = int(port_env) if port_env else 5000
+    except ValueError:
+        port = 5000
+
+    # Helpful startup info
+    print(f"\nENV mode: {env_mode}")
+    print(f"Debug: {debug}")
+    print(f"Binding: http://{host}:{port}")
+
+    if env_mode not in {"development", "dev"} and host == "0.0.0.0":
+        print("[warning] Binding to 0.0.0.0 outside development is unsafe; switching to 127.0.0.1")
+        host = "127.0.0.1"
+
+    if env_mode not in {"development", "dev"}:
+        print("\n[notice] Production mode detected. For production, prefer a WSGI server (e.g., gunicorn):")
+        print("         gunicorn -w 4 'dashboard_server:app'")
+
+    app.run(debug=debug, host=host, port=port)

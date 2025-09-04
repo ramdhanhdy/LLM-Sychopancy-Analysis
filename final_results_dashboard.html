@@ -135,13 +135,76 @@
     </div>
 
     <script>
-        async function fetchJSON(url) { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return r.json(); }
+        async function fetchJSON(url) {
+            try {
+                const r = await fetch(url);
+                if (!r.ok) {
+                    let body = '';
+                    try { body = await r.text(); } catch (_) {}
+                    const msg = `Request failed ${r.status} ${r.statusText} for ${url}` + (body ? ` — ${body.slice(0,200)}` : '');
+                    const err = new Error(msg);
+                    err.status = r.status;
+                    err.statusText = r.statusText;
+                    err.url = url;
+                    err.body = body;
+                    throw err;
+                }
+                try {
+                    return await r.json();
+                } catch (e) {
+                    const err = new Error(`Failed to parse JSON from ${url}: ${e?.message || e}`);
+                    err.cause = e;
+                    err.url = url;
+                    throw err;
+                }
+            } catch (e) {
+                if (e instanceof Error) {
+                    if (!('url' in e)) {
+                        const err = new Error(`Network error fetching ${url}: ${e.message}`);
+                        err.cause = e;
+                        err.url = url;
+                        throw err;
+                    }
+                    throw e;
+                }
+                const err = new Error(`Unknown error fetching ${url}: ${String(e)}`);
+                err.url = url;
+                throw err;
+            }
+        }
+
+        function displayError(targetEl, message, onRetry) {
+            const el = (typeof targetEl === 'string') ? document.querySelector(targetEl) : targetEl;
+            if (!el) return;
+            el.innerHTML = `
+                <div style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:12px; border-radius:8px;">
+                    <div style="font-weight:600; margin-bottom:6px;">Error</div>
+                    <div style="font-size:0.95rem; margin-bottom:10px; white-space:pre-wrap;">${message}</div>
+                    ${onRetry ? '<button class=\"retry-button\" style=\"background:#991b1b; color:white; border:none; border-radius:6px; padding:8px 12px; cursor:pointer;\">Retry</button>' : ''}
+                </div>`;
+            if (onRetry) {
+                const btn = el.querySelector('.retry-button');
+                if (btn) btn.addEventListener('click', () => { try { onRetry(); } catch(_){} });
+            }
+        }
 
         async function loadFinalResults() {
             try {
                 const syc = await fetchJSON('/api/final_results/sycophancy_scores');
                 return syc.items || [];
-            } catch (_) { return []; }
+            } catch (error) {
+                console.error(error);
+                const retry = async () => { await initDashboard(); };
+                const tableEl = document.getElementById('finalResultsTable');
+                if (tableEl) displayError(tableEl, `Failed to load final results. ${error.message || error}`, retry);
+                const siCanvas = document.getElementById('siPerModelChart');
+                if (siCanvas && siCanvas.parentElement) {
+                    const holder = document.createElement('div');
+                    siCanvas.parentElement.insertAdjacentElement('beforebegin', holder);
+                    displayError(holder, `Failed to load SI per-model data. ${error.message || error}`, retry);
+                }
+                return [];
+            }
         }
 
         function renderFinalResultsTable(items) {
@@ -174,7 +237,8 @@
 
         // --- Community scores (tables + radar) ---
         async function loadCommunities(k=6) {
-            try { const data = await fetchJSON(`/api/final_results/network?k=${k}`); return data.nodes || []; } catch (_) { return []; }
+            const data = await fetchJSON(`/api/final_results/network?k=${k}`);
+            return data.nodes || [];
         }
 
         function buildCommunityMap(nodes) {
@@ -267,6 +331,7 @@
         }
 
         async function renderCommunitySection(items) {
+            try {
             const nodes = await loadCommunities(6);
             const { map: commMap, communities } = buildCommunityMap(nodes);
             const { stats, overall, metrics, matchedCount } = computeCommunityStats(items, commMap);
@@ -318,12 +383,22 @@
             };
             const defaults = communities.slice(0, 2);
             buildCheckboxes(defaults);
-            const initChecked = Array.from(document.querySelectorAll('.commCheck:checked')).map(el => Number(el.value));
-            if (initChecked.length === 1) {
-                renderCommunityModelsTable(initChecked[0], items, commMap, metrics);
-            } else {
-                const container = document.getElementById('communityModelsTable');
-                container.innerHTML = '<p class="section-description">Select exactly one community to see its models.</p>';
+            // Populate dropdowns and set initial selection
+            const sel = document.getElementById('communitySelect');
+            const cmp = document.getElementById('communityCompare');
+            if (sel) {
+                sel.innerHTML = communities.map(c => `<option value="${c}">Community ${c}</option>`).join('');
+                if (communities.length) sel.value = String(communities[0]);
+            }
+            if (cmp) {
+                cmp.innerHTML = communities.map(c => `<option value="${c}">Community ${c}</option>`).join('');
+            }
+            const selected = Number(sel?.value);
+            const modelsEl = document.getElementById('communityModelsTable');
+            if (!Number.isNaN(selected)) {
+                renderCommunityModelsTable(selected, items, commMap, metrics);
+            } else if (modelsEl) {
+                modelsEl.innerHTML = '<p class="section-description">Select a community to see its models.</p>';
             }
             // Normalization helpers
             const computeNorm = (items, metrics) => {
@@ -397,13 +472,27 @@
             });
             const chk = document.getElementById('communityNormalize');
             if (chk) chk.addEventListener('change', redrawRadar);
+        } catch (error) {
+            console.error(error);
+            const grid = document.querySelector('.dashboard-grid');
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="card-header">Community Scores</div>
+                <div class="card-content"><div id="communityError"></div></div>`;
+            grid.appendChild(card);
+            const content = card.querySelector('#communityError') || card.querySelector('.card-content') || card;
+            displayError(content, `Failed to load community data. ${error.message || error}`, async () => {
+                try { card.remove(); } catch(_){}
+                await renderCommunitySection(items);
+            });
         }
 
         class PromptExplorer {
             constructor() { this.prompts = []; this.filtered = []; this.init(); }
             async init() {
                 try { this.prompts = await fetchJSON('/api/prompt_battery'); this.populateFilters(); this.applyFilters(); this.setupEvents(); }
-                catch (e) { document.getElementById('promptBatteries').innerHTML = '<p class="section-description">Failed to load prompts.</p>'; }
+                catch (e) { console.error(e); displayError(document.getElementById('promptBatteries'), `Failed to load prompts. ${e.message || e}`, () => this.init()); }
             }
             populateFilters() {
                 const topics = Array.from(new Set(this.prompts.map(p => p.topic)));
@@ -503,17 +592,20 @@
             a.href = url;
         }
 
-        document.addEventListener('DOMContentLoaded', async () => {
+        async function initDashboard() {
             const items = await loadFinalResults();
-            renderSIChart(items);
-            renderFinalResultsTable(items);
-            renderNetworkImage();
-            // After network, add community section
-            await renderCommunitySection(items);
+            if (items && items.length) {
+                renderSIChart(items);
+                renderFinalResultsTable(items);
+                renderNetworkImage();
+                // After network, add community section
+                await renderCommunitySection(items);
+            }
             const btn = document.getElementById('netRefresh');
             if (btn) btn.addEventListener('click', renderNetworkImage);
             new PromptExplorer();
-        });
+        }
+        document.addEventListener('DOMContentLoaded', initDashboard);
     </script>
 </body>
 </html>

@@ -180,13 +180,13 @@ def evaluate_responses(gt_df: pd.DataFrame, pmeta: Dict[str, PromptMeta],
     error_count = 0
     
     for i, r in enumerate(gt_df.itertuples(index=False)):
-        pid = getattr(r, "prompt_id")
+        pid = r.prompt_id
         meta = pmeta.get(pid)
         if meta is None:
             progress_bar.update(1)
             continue
             
-        resp = str(getattr(r, "response", ""))
+        resp = str(r.response) if hasattr(r, "response") and r.response is not None else ""
 
         try:
             s, call_meta = score_response_llm_with_meta(resp=resp, meta=meta, api_key=api_key)
@@ -204,9 +204,9 @@ def evaluate_responses(gt_df: pd.DataFrame, pmeta: Dict[str, PromptMeta],
             continue
 
         row = {
-            "model": getattr(r, "model"),
+            "model": r.model,
             "prompt_id": pid,
-            "human_eval": getattr(r, "human_eval"),
+            "human_eval": r.human_eval,
             "judge_model": model_config["model"],
             "judge_temperature": model_config["temperature"],
             "judge_max_tokens": model_config["max_tokens"],
@@ -408,7 +408,7 @@ def main():
     # Setup
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = args.output_dir or os.path.join(project_root, "evaluation_results")
-    api_key = os.getenv("OPENROUTER_API_KEY", os.getenv("OPENROUTER_API_KEY"))
+    api_key = os.getenv("OPENROUTER_API_KEY")
     
     if not api_key:
         print("❌ Error: OpenRouter API key not found")

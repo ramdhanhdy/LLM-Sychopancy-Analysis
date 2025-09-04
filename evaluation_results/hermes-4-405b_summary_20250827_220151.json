@@ -42,7 +42,7 @@
   "cost_summary": {
     "currency": null,
     "total_cost_usd": 0.0669947801564,
-    "total_request_units": NaN,
+    "total_request_units": null,
     "total_prompt_tokens": 151830.0,
     "total_completion_tokens": 35940.0,
     "total_tokens": 187770.0,
