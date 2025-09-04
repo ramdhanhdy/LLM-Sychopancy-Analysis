@@ -62,6 +62,28 @@
                 <div class="card-content"><div id="finalResultsTable"></div></div>
             </div>
             <div class="card">
+                <div class="card-header">ℹ️ Metrics Guide</div>
+                <div class="card-content">
+                    <p class="section-description">Key metrics used in the Final Results. Ranges are typically 0–1 unless noted. Higher/lower notes indicate the desirable direction in safety/robustness terms.</p>
+                    <ul style="list-style: none; padding-left: 0; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:10px;">
+                        <li><strong>SI</strong>: Composite Sycophancy Index. Higher = more sycophantic overall.</li>
+                        <li><strong>AOS</strong>: Agreement-with-Stance. Mean endorsement of the user’s stance. Higher = more agreement.</li>
+                        <li><strong>CCR</strong>: Challenge/Correction Rate. Mean challenging behavior. Higher = more challenge; SI uses (1 − CCR).</li>
+                        <li><strong>HVS</strong>: Harm Validation Score (harm-only). Higher = more validation of harmful content (undesirable). Often small magnitude (0.01–0.10).</li>
+                        <li><strong>DAC</strong>: Devil’s Advocate Compliance (devil-only). Higher = better at challenging when asked; SI uses (1 − DAC).</li>
+                        <li><strong>CAVEAT1</strong>: Caveat in Opening. Higher = opens with caution; SI uses (1 − CAVEAT1) as a “praise‑first” proxy.</li>
+                        <li><strong>FLAT</strong>: Flattery Density (per 100 tokens). Higher = more praise/flattery; down‑weighted in SI.</li>
+                        <li><strong>SAFE</strong>: Safe Alternative Rate (harm-only). Higher = proposes safer alternatives on harmful prompts (desirable). Often small (0.01–0.10).</li>
+                        <li><strong>RR</strong>: Refusal Rate. Fraction of responses that explicitly refuse.</li>
+                        <li><strong>EVAS</strong>: Evasion Rate. Fraction that avoids a substantive answer.</li>
+                        <li><strong>HEDGE</strong>: Hedging frequency. Use of uncertainty language.</li>
+                        <li><strong>INTENS</strong>: Intensity. Strength of emphatic/praise wording.</li>
+                        <li><strong>AE</strong>: Attitude Elasticity. Sensitivity to prompt strength (signed).</li>
+                    </ul>
+                    <p class="section-description" style="margin-top:8px;">Radar charts optionally normalize each axis by the 95th percentile, so lower‑magnitude metrics like SAFE and HVS remain visible alongside larger‑scale metrics.</p>
+                </div>
+            </div>
+            <div class="card">
                 <div class="card-header">🕸️ Model Network</div>
                 <div class="card-content">
                     <p class="section-description">Exact Matplotlib render from the project’s pipeline (UMAP/spring + kNN + MST, Leiden communities).</p>
@@ -257,17 +279,23 @@
                 <div class="card-content">
                     <p class="section-description">Aggregated model scores by Leiden communities detected on the network. Matched models: ${matchedCount}.</p>
                     <div id="communitySummaryTable" style="margin-bottom:14px;"></div>
-                    <div style="display:flex; gap:16px; align-items:center; margin:8px 0 8px;">
-                        <label for="communitySelect">Community</label>
-                        <select id="communitySelect"></select>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:center; margin:8px 0 8px;">
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <label for="communitySelect">Community</label>
+                            <select id="communitySelect"></select>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <label for="communityCompare">Compare</label>
+                            <select id="communityCompare" multiple size="4" style="min-width: 180px;"></select>
+                        </div>
                     </div>
                     <div style="display:flex; gap:12px; align-items:center; margin:8px 0;">
                         <input type="checkbox" id="communityNormalize" checked />
                         <label for="communityNormalize">Normalize metrics per-axis (p95 scaling) for radar</label>
                     </div>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:stretch;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
                         <div><div id="communityModelsTable"></div></div>
-                        <div style="min-height:300px;">
+                        <div style="height:420px;">
                             <canvas id="communityRadarChart" style="width:100%; height:100%;"></canvas>
                         </div>
                     </div>
@@ -277,12 +305,26 @@
             // Render summary table
             renderCommunitySummaryTable(stats, metrics);
 
-            // Populate select and initial render
-            const sel = document.getElementById('communitySelect');
-            sel.innerHTML = communities.map(c => `<option value="${c}">Community ${c}</option>`).join('');
-            const current = communities[0];
-            sel.value = String(current);
-            renderCommunityModelsTable(current, items, commMap, metrics);
+            // Build communities checkbox UI
+            const checkboxContainer = document.getElementById('communityCheckboxes');
+            const buildCheckboxes = (defaults = []) => {
+                let html = '<div style="font-weight:600; margin-bottom:6px;">Communities (check to display)</div>';
+                html += '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:6px; max-height:180px; overflow:auto; padding-right:4px;">';
+                html += '<label style="display:flex; gap:6px; align-items:center;"><input type="checkbox" id="overallCompare" checked /> Overall</label>';
+                html += communities.map(c => `
+                    <label style=\"display:flex; gap:6px; align-items:center;\">\n                        <input type=\"checkbox\" class=\"commCheck\" value=\"${c}\" ${defaults.includes(c)? 'checked':''} />\n                        Community ${c}\n                    </label>`).join('');
+                html += '</div>';
+                checkboxContainer.innerHTML = html;
+            };
+            const defaults = communities.slice(0, 2);
+            buildCheckboxes(defaults);
+            const initChecked = Array.from(document.querySelectorAll('.commCheck:checked')).map(el => Number(el.value));
+            if (initChecked.length === 1) {
+                renderCommunityModelsTable(initChecked[0], items, commMap, metrics);
+            } else {
+                const container = document.getElementById('communityModelsTable');
+                container.innerHTML = '<p class="section-description">Select exactly one community to see its models.</p>';
+            }
             // Normalization helpers
             const computeNorm = (items, metrics) => {
                 const norm = {}; for (const m of metrics) {
@@ -294,27 +336,63 @@
             const applyNorm = (series, labels, norm, enabled) => enabled ? series.map((v,i)=>Math.max(0, Math.min(1.2, (Number(v)||0)/((norm[labels[i]]?.p95)||1)))) : series;
             const norm = computeNorm(items, metrics);
             const redrawRadar = () => {
-                const selected = Number(sel.value);
                 const labels = metrics;
-                const row = stats.find(s => s.community === selected);
-                const dataAraw = labels.map(m=>row[m]||0);
-                const dataBraw = labels.map(m=>overall[m]||0);
+                const chosen = Array.from(document.querySelectorAll('.commCheck:checked')).map(el => Number(el.value));
+                let primaryLabel = 'Selected Avg';
+                let dataAraw;
+                if (chosen.length === 1) {
+                    const r = stats.find(s => s.community === chosen[0]);
+                    dataAraw = labels.map(m => (r ? (r[m]||0) : 0));
+                    primaryLabel = `Community ${chosen[0]}`;
+                } else if (chosen.length > 1) {
+                    const agg = labels.map(() => 0);
+                    chosen.forEach(cid => {
+                        const r = stats.find(s => s.community === cid);
+                        labels.forEach((m,i) => { agg[i] += (r ? (r[m]||0) : 0); });
+                    });
+                    dataAraw = agg.map(v => v / chosen.length);
+                } else {
+                    dataAraw = labels.map(() => 0);
+                }
+                const selectedOpts = [];
+                const chkOverall = document.getElementById('overallCompare');
+                if (chkOverall && chkOverall.checked) selectedOpts.push('Overall');
+                chosen.forEach(cid => selectedOpts.push(String(cid)));
                 const useNorm = document.getElementById('communityNormalize')?.checked ?? true;
                 const dataA = applyNorm(dataAraw, labels, norm, useNorm);
-                const dataB = applyNorm(dataBraw, labels, norm, useNorm);
                 const canvas = document.getElementById('communityRadarChart');
                 if (window._commRadar) { try { window._commRadar.destroy(); } catch(_){} }
+                const datasets = [ { label: primaryLabel, data: dataA, backgroundColor:'rgba(14,165,233,0.18)', borderColor:'#0ea5e9', borderWidth:2 } ];
+                const palette = ['#8b5cf6','#f59e0b','#14b8a6','#ef4444','#a855f7','#f97316','#22c55e','#0ea5e9','#eab308','#06b6d4'];
+                let colorIdx = 0;
+                const pushSeries = (label, raw) => {
+                    const c = palette[colorIdx++ % palette.length];
+                    datasets.push({ label, data: applyNorm(raw, labels, norm, useNorm), backgroundColor: 'rgba(0,0,0,0.06)', borderColor: c, borderWidth: 2 });
+                };
+                for (const key of selectedOpts) {
+                    if (key === 'Overall') {
+                        pushSeries('Overall', labels.map(m=>overall[m]||0));
+                    } else {
+                        const cnum = Number(key);
+                        if (!Number.isNaN(cnum)) {
+                            const brow = stats.find(s => s.community === cnum);
+                            if (brow) pushSeries(`Community ${cnum}`, labels.map(m=>brow[m]||0));
+                        }
+                    }
+                }
                 window._commRadar = new Chart(canvas.getContext('2d'), {
-                    type:'radar', data:{ labels, datasets:[
-                        { label:`Community ${selected}`, data: dataA, backgroundColor:'rgba(14,165,233,0.2)', borderColor:'#0ea5e9', borderWidth:2 },
-                        { label:'Overall', data: dataB, backgroundColor:'rgba(16,185,129,0.15)', borderColor:'#10b981', borderWidth:2 }
-                    ]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top' } }, scales:{ r:{ beginAtZero:true, suggestedMax:1.0 } } }
+                    type:'radar', data:{ labels, datasets }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top' } }, scales:{ r:{ beginAtZero:true, suggestedMax:1.0 } } }
                 });
             };
             redrawRadar();
-            sel.addEventListener('change', () => {
-                const val = Number(sel.value);
-                renderCommunityModelsTable(val, items, commMap, metrics);
+            checkboxContainer.addEventListener('change', () => {
+                const checked = Array.from(document.querySelectorAll('.commCheck:checked')).map(el => Number(el.value));
+                if (checked.length === 1) {
+                    renderCommunityModelsTable(checked[0], items, commMap, metrics);
+                } else {
+                    const container = document.getElementById('communityModelsTable');
+                    container.innerHTML = '<p class="section-description">Select exactly one community to see its models.</p>';
+                }
                 redrawRadar();
             });
             const chk = document.getElementById('communityNormalize');
