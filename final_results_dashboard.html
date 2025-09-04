@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Final Results & Prompt Explorer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f8fafc; color:#1e293b; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .header { text-align:center; margin-bottom:24px; padding:28px 20px; background:#0b3d3a; border-radius:16px; color:#f8fafc; }
+        .header h1 { font-size: 1.8rem; margin-bottom:6px; }
+        .section-header { display:flex; align-items:center; gap:12px; font-size:1.2rem; font-weight:700; color:#f8fafc; margin: 20px 0 10px; background:#0b3d3a; padding:10px 14px; border-radius:8px; }
+        .section-description { font-size:0.95rem; color:#475569; margin: 4px 0 16px; }
+        .dashboard-grid { display:grid; grid-template-columns: 1fr; gap:20px; margin-bottom:20px; }
+        .card { background:white; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.08); overflow:hidden; }
+        .card-header { background:#0b3d3a; color:#f8fafc; padding:16px 20px; font-weight:600; border-bottom:1px solid #08302d; }
+        .card-content { padding:18px; }
+        .controls { background:white; padding:16px; border-radius:12px; border:1px solid #e2e8f0; display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+        .control-group { display:flex; flex-direction:column; gap:6px; }
+        select, input { padding:8px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; }
+        select:focus, input:focus { outline:none; border-color:#3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .scores-table { width:100%; border-collapse: collapse; }
+        .scores-table th { background:#0b3d3a; color:#f8fafc; padding:12px; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; text-align:left; }
+        .scores-table td { padding:12px; border-bottom:1px solid #f3f4f6; }
+        .battery-header { background:#59540A; color:white; padding:16px 20px; border-radius:12px 12px 0 0; display:flex; justify-content:space-between; align-items:center; }
+        .battery-title { font-weight:600; }
+        .battery-stats { display:flex; gap:12px; font-size:0.9rem; }
+        .stat-item { background: rgba(255,255,255,0.15); padding:4px 10px; border-radius:20px; }
+        .prompt-list { display:flex; flex-direction:column; gap:8px; }
+        .prompt-item { border:1px solid #e5e7eb; border-radius:8px; background:white; overflow:hidden; }
+        .prompt-header { padding:12px 16px; display:flex; align-items:center; gap:12px; cursor:pointer; }
+        .prompt-header:hover { background:#f9fafb; }
+        .prompt-id { color:#3b82f6; font-weight:600; min-width:40px; }
+        .prompt-preview { flex:1; color:#374151; }
+        .prompt-details { display:none; padding:0 16px 16px 16px; border-top:1px solid #f3f4f6; background:#fafbfc; }
+        .prompt-item.expanded .prompt-details { display:block; }
+        .prompt-full-text { padding:12px; border-left:4px solid #3b82f6; background:white; border-radius:6px; margin-bottom:10px; }
+        .prompt-metadata { display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:10px; }
+        .metadata-label { font-size:0.75rem; color:#6b7280; text-transform:uppercase; }
+        .metadata-value { font-size:0.9rem; color:#374151; font-weight:500; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Final Results & Prompt Explorer</h1>
+            <p>Non-judge sycophancy results plus interactive prompt browsing.</p>
+        </div>
+
+        <div class="section-header">Final Results</div>
+        <p class="section-description">Data from <code>results/combined_run_0c_1_1b</code>. Sycophancy Index (SI) summarizes per-model behavior.</p>
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="card-header">📈 Sycophancy Index by Model</div>
+                <div class="card-content"><div style="height:340px;"><canvas id="siPerModelChart"></canvas></div></div>
+            </div>
+            <div class="card">
+                <div class="card-header">📋 Per-Model Metrics</div>
+                <div class="card-content"><div id="finalResultsTable"></div></div>
+            </div>
+            <div class="card">
+                <div class="card-header">ℹ️ Metrics Guide</div>
+                <div class="card-content">
+                    <p class="section-description">Key metrics used in the Final Results. Ranges are typically 0–1 unless noted. Higher/lower notes indicate the desirable direction in safety/robustness terms.</p>
+                    <ul style="list-style: none; padding-left: 0; display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:10px;">
+                        <li><strong>SI</strong>: Composite Sycophancy Index. Higher = more sycophantic overall.</li>
+                        <li><strong>AOS</strong>: Agreement-with-Stance. Mean endorsement of the user’s stance. Higher = more agreement.</li>
+                        <li><strong>CCR</strong>: Challenge/Correction Rate. Mean challenging behavior. Higher = more challenge; SI uses (1 − CCR).</li>
+                        <li><strong>HVS</strong>: Harm Validation Score (harm-only). Higher = more validation of harmful content (undesirable). Often small magnitude (0.01–0.10).</li>
+                        <li><strong>DAC</strong>: Devil’s Advocate Compliance (devil-only). Higher = better at challenging when asked; SI uses (1 − DAC).</li>
+                        <li><strong>CAVEAT1</strong>: Caveat in Opening. Higher = opens with caution; SI uses (1 − CAVEAT1) as a “praise‑first” proxy.</li>
+                        <li><strong>FLAT</strong>: Flattery Density (per 100 tokens). Higher = more praise/flattery; down‑weighted in SI.</li>
+                        <li><strong>SAFE</strong>: Safe Alternative Rate (harm-only). Higher = proposes safer alternatives on harmful prompts (desirable). Often small (0.01–0.10).</li>
+                        <li><strong>RR</strong>: Refusal Rate. Fraction of responses that explicitly refuse.</li>
+                        <li><strong>EVAS</strong>: Evasion Rate. Fraction that avoids a substantive answer.</li>
+                        <li><strong>HEDGE</strong>: Hedging frequency. Use of uncertainty language.</li>
+                        <li><strong>INTENS</strong>: Intensity. Strength of emphatic/praise wording.</li>
+                        <li><strong>AE</strong>: Attitude Elasticity. Sensitivity to prompt strength (signed).</li>
+                    </ul>
+                    <p class="section-description" style="margin-top:8px;">Radar charts optionally normalize each axis by the 95th percentile, so lower‑magnitude metrics like SAFE and HVS remain visible alongside larger‑scale metrics.</p>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">🕸️ Model Network</div>
+                <div class="card-content">
+                    <p class="section-description">Exact Matplotlib render from the project’s pipeline (UMAP/spring + kNN + MST, Leiden communities).</p>
+                    <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+                        <label for="netK">k-NN k</label>
+                        <select id="netK">
+                            <option value="6" selected>6</option>
+                            <option value="8">8</option>
+                            <option value="10">10</option>
+                        </select>
+                        <label for="netLayout">Layout</label>
+                        <select id="netLayout">
+                            <option value="umap" selected>UMAP</option>
+                            <option value="spring">Spring</option>
+                        </select>
+                        <button id="netRefresh" style="padding:6px 10px; border:1px solid #d1d5db; border-radius:8px; background:#0f172a; color:#f8fafc; cursor:pointer;">Refresh</button>
+                        <a id="netDownload" href="#" download="network.png" style="margin-left:auto; text-decoration:none;">Download PNG</a>
+                    </div>
+                    <div style="width:100%; border:1px solid #eef2f7; border-radius:8px; background:white;">
+                        <img id="networkImage" alt="Network" style="width:100%; display:block; border-radius:8px;" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-header" id="prompt-battery">Prompt Battery Explorer</div>
+        <p class="section-description">Filter and inspect prompts used to probe sycophancy.</p>
+
+        <div class="controls" id="promptControls">
+            <div class="control-group">
+                <label for="topicFilter">Topic</label>
+                <select id="topicFilter"><option value="">All Topics</option></select>
+            </div>
+            <div class="control-group">
+                <label for="stanceFilter">Stance</label>
+                <select id="stanceFilter"><option value="">All Stances</option><option value="1">Positive</option><option value="-1">Negative</option></select>
+            </div>
+            <div class="control-group">
+                <label for="strengthFilter">Strength</label>
+                <select id="strengthFilter"><option value="">All Strengths</option><option value="0.2">Low (0.2)</option><option value="0.5">Medium (0.5)</option><option value="0.8">High (0.8)</option></select>
+            </div>
+            <div class="control-group">
+                <label for="searchInput">Search</label>
+                <input type="text" id="searchInput" placeholder="Search prompts..." />
+            </div>
+        </div>
+
+        <div id="promptBatteries"><div class="section-description">Loading prompts...</div></div>
+    </div>
+
+    <script>
+        async function fetchJSON(url) {
+            try {
+                const r = await fetch(url);
+                if (!r.ok) {
+                    let body = '';
+                    try { body = await r.text(); } catch (_) {}
+                    const msg = `Request failed ${r.status} ${r.statusText} for ${url}` + (body ? ` — ${body.slice(0,200)}` : '');
+                    const err = new Error(msg);
+                    err.status = r.status;
+                    err.statusText = r.statusText;
+                    err.url = url;
+                    err.body = body;
+                    throw err;
+                }
+                try {
+                    return await r.json();
+                } catch (e) {
+                    const err = new Error(`Failed to parse JSON from ${url}: ${e?.message || e}`);
+                    err.cause = e;
+                    err.url = url;
+                    throw err;
+                }
+            } catch (e) {
+                if (e instanceof Error) {
+                    if (!('url' in e)) {
+                        const err = new Error(`Network error fetching ${url}: ${e.message}`);
+                        err.cause = e;
+                        err.url = url;
+                        throw err;
+                    }
+                    throw e;
+                }
+                const err = new Error(`Unknown error fetching ${url}: ${String(e)}`);
+                err.url = url;
+                throw err;
+            }
+        }
+
+        function displayError(targetEl, message, onRetry) {
+            const el = (typeof targetEl === 'string') ? document.querySelector(targetEl) : targetEl;
+            if (!el) return;
+            el.innerHTML = `
+                <div style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:12px; border-radius:8px;">
+                    <div style="font-weight:600; margin-bottom:6px;">Error</div>
+                    <div style="font-size:0.95rem; margin-bottom:10px; white-space:pre-wrap;">${message}</div>
+                    ${onRetry ? '<button class=\"retry-button\" style=\"background:#991b1b; color:white; border:none; border-radius:6px; padding:8px 12px; cursor:pointer;\">Retry</button>' : ''}
+                </div>`;
+            if (onRetry) {
+                const btn = el.querySelector('.retry-button');
+                if (btn) btn.addEventListener('click', () => { try { onRetry(); } catch(_){} });
+            }
+        }
+
+        async function loadFinalResults() {
+            try {
+                const syc = await fetchJSON('/api/final_results/sycophancy_scores');
+                return syc.items || [];
+            } catch (error) {
+                console.error(error);
+                const retry = async () => { await initDashboard(); };
+                const tableEl = document.getElementById('finalResultsTable');
+                if (tableEl) displayError(tableEl, `Failed to load final results. ${error.message || error}`, retry);
+                const siCanvas = document.getElementById('siPerModelChart');
+                if (siCanvas && siCanvas.parentElement) {
+                    const holder = document.createElement('div');
+                    siCanvas.parentElement.insertAdjacentElement('beforebegin', holder);
+                    displayError(holder, `Failed to load SI per-model data. ${error.message || error}`, retry);
+                }
+                return [];
+            }
+        }
+
+        function renderFinalResultsTable(items) {
+            const el = document.getElementById('finalResultsTable');
+            if (!items.length) { el.innerHTML = '<p class="section-description">No results found.</p>'; return; }
+            const cols = ['model','SI','CCR','DAC','SAFE','HVS','AOS','n_total','n_harm','n_devil'].filter(c => c in items[0]);
+            let html = '<table class="scores-table"><thead><tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+            for (const row of items) {
+                html += '<tr>' + cols.map(c => {
+                    let v = row[c];
+                    if (['SI','CCR','DAC','SAFE','HVS','AOS'].includes(c) && typeof v === 'number') v = v.toFixed(3);
+                    return `<td>${v ?? ''}</td>`;
+                }).join('') + '</tr>';
+            }
+            html += '</tbody></table>';
+            el.innerHTML = html;
+        }
+
+        function renderSIChart(items) {
+            const canvas = document.getElementById('siPerModelChart');
+            if (!items.length) { canvas.parentElement.innerHTML = '<p class="section-description">No data available.</p>'; return; }
+            const sorted = items.filter(r => typeof r.SI === 'number').sort((a,b)=>b.SI - a.SI);
+            const labels = sorted.map(r=>r.model); const data = sorted.map(r=>r.SI);
+            if (window._siChart) try { window._siChart.destroy(); } catch(_){}
+            window._siChart = new Chart(canvas.getContext('2d'), {
+                type:'bar', data:{ labels, datasets:[{ label:'Sycophancy Index (SI)', data, backgroundColor:'#0ea5e9', borderRadius:6 }] },
+                options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true }, x:{} }, plugins:{ legend:{ display:false } } }
+            });
+        }
+
+        // --- Community scores (tables + radar) ---
+        async function loadCommunities(k=6) {
+            const data = await fetchJSON(`/api/final_results/network?k=${k}`);
+            return data.nodes || [];
+        }
+
+        function buildCommunityMap(nodes) {
+            const map = new Map();
+            const set = new Set();
+            nodes.forEach(n => { map.set(n.label, n.community ?? 0); set.add(n.community ?? 0); });
+            return { map, communities: Array.from(set).sort((a,b)=>a-b) };
+        }
+
+        function computeCommunityStats(items, commMap) {
+            const metrics = ['SI','CCR','DAC','SAFE','HVS','AOS'];
+            const byComm = new Map();
+            let overall = { count: 0 }; metrics.forEach(m=>overall[m]=0);
+            const matched = [];
+            for (const r of items) {
+                const c = commMap.get(r.model);
+                if (c === undefined) continue; // skip models not in network
+                matched.push(r);
+                if (!byComm.has(c)) { const obj={count:0}; metrics.forEach(m=>obj[m]=0); byComm.set(c,obj); }
+                const agg = byComm.get(c); agg.count += 1; overall.count += 1;
+                metrics.forEach(m => { const v = Number(r[m]); if (!Number.isNaN(v)) { agg[m] += v; overall[m] += v; } });
+            }
+            // finalize averages
+            const stats = [];
+            for (const [c, agg] of byComm.entries()) {
+                const row = { community: c, count: agg.count };
+                metrics.forEach(m => row[m] = agg.count ? agg[m]/agg.count : 0);
+                stats.push(row);
+            }
+            const overallAvg = { community: 'Overall', count: overall.count };
+            metrics.forEach(m => overallAvg[m] = overall.count ? overall[m]/overall.count : 0);
+            return { stats: stats.sort((a,b)=>b.count-a.count), overall: overallAvg, metrics, matchedCount: matched.length };
+        }
+
+        function renderCommunitySummaryTable(stats, metrics) {
+            const container = document.getElementById('communitySummaryTable');
+            if (!container) return;
+            if (!stats.length) { container.innerHTML = '<p class="section-description">No community data available.</p>'; return; }
+            const cols = ['community', 'count', ...metrics];
+            let html = '<table class="scores-table"><thead><tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+            for (const row of stats) {
+                html += '<tr>' + cols.map(c => {
+                    let v = row[c];
+                    if (metrics.includes(c)) v = (Number(v)||0).toFixed(3);
+                    return `<td>${v}</td>`;
+                }).join('') + '</tr>';
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function renderCommunityModelsTable(selectedCommunity, items, commMap, metrics) {
+            const container = document.getElementById('communityModelsTable');
+            if (!container) return;
+            const rows = items.filter(r => commMap.get(r.model) === selectedCommunity);
+            if (!rows.length) { container.innerHTML = '<p class="section-description">No models in this community.</p>'; return; }
+            const cols = ['model', ...metrics];
+            let html = '<table class="scores-table"><thead><tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr></thead><tbody>';
+            for (const r of rows) {
+                html += '<tr>' + cols.map(c => {
+                    let v = r[c];
+                    if (metrics.includes(c)) v = (Number(v)||0).toFixed(3);
+                    return `<td>${v ?? ''}</td>`;
+                }).join('') + '</tr>';
+            }
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function renderCommunityRadar(selectedCommunity, stats, overall, metrics) {
+            const canvas = document.getElementById('communityRadarChart');
+            if (!canvas) return;
+            const row = stats.find(s => s.community === selectedCommunity);
+            if (!row) { canvas.parentElement.innerHTML = '<p class="section-description">No data for radar.</p>'; return; }
+            const labels = metrics;
+            const dataA = labels.map(m => row[m] || 0);
+            const dataB = labels.map(m => overall[m] || 0);
+            if (window._commRadar) { try { window._commRadar.destroy(); } catch(_){} }
+            window._commRadar = new Chart(canvas.getContext('2d'), {
+                type: 'radar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: `Community ${selectedCommunity}`, data: dataA, backgroundColor: 'rgba(14,165,233,0.2)', borderColor: '#0ea5e9', borderWidth: 2 },
+                        { label: 'Overall', data: dataB, backgroundColor: 'rgba(16,185,129,0.15)', borderColor: '#10b981', borderWidth: 2 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { r: { beginAtZero: true } } }
+            });
+        }
+
+        async function renderCommunitySection(items) {
+            try {
+            const nodes = await loadCommunities(6);
+            const { map: commMap, communities } = buildCommunityMap(nodes);
+            const { stats, overall, metrics, matchedCount } = computeCommunityStats(items, commMap);
+            // Inject HTML for section if not present
+            const grid = document.querySelector('.dashboard-grid');
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="card-header">🏘️ Community Scores</div>
+                <div class="card-content">
+                    <p class="section-description">Aggregated model scores by Leiden communities detected on the network. Matched models: ${matchedCount}.</p>
+                    <div id="communitySummaryTable" style="margin-bottom:14px;"></div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:center; margin:8px 0 8px;">
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <label for="communitySelect">Community</label>
+                            <select id="communitySelect"></select>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <label for="communityCompare">Compare</label>
+                            <select id="communityCompare" multiple size="4" style="min-width: 180px;"></select>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:12px; align-items:center; margin:8px 0;">
+                        <input type="checkbox" id="communityNormalize" checked />
+                        <label for="communityNormalize">Normalize metrics per-axis (p95 scaling) for radar</label>
+                    </div>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; align-items:start;">
+                        <div><div id="communityModelsTable"></div></div>
+                        <div style="height:420px;">
+                            <canvas id="communityRadarChart" style="width:100%; height:100%;"></canvas>
+                        </div>
+                    </div>
+                </div>`;
+            grid.appendChild(card);
+
+            // Render summary table
+            renderCommunitySummaryTable(stats, metrics);
+
+            // Build communities checkbox UI
+            const checkboxContainer = document.getElementById('communityCheckboxes');
+            const buildCheckboxes = (defaults = []) => {
+                let html = '<div style="font-weight:600; margin-bottom:6px;">Communities (check to display)</div>';
+                html += '<div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:6px; max-height:180px; overflow:auto; padding-right:4px;">';
+                html += '<label style="display:flex; gap:6px; align-items:center;"><input type="checkbox" id="overallCompare" checked /> Overall</label>';
+                html += communities.map(c => `
+                    <label style=\"display:flex; gap:6px; align-items:center;\">\n                        <input type=\"checkbox\" class=\"commCheck\" value=\"${c}\" ${defaults.includes(c)? 'checked':''} />\n                        Community ${c}\n                    </label>`).join('');
+                html += '</div>';
+                checkboxContainer.innerHTML = html;
+            };
+            const defaults = communities.slice(0, 2);
+            buildCheckboxes(defaults);
+            // Populate dropdowns and set initial selection
+            const sel = document.getElementById('communitySelect');
+            const cmp = document.getElementById('communityCompare');
+            if (sel) {
+                sel.innerHTML = communities.map(c => `<option value="${c}">Community ${c}</option>`).join('');
+                if (communities.length) sel.value = String(communities[0]);
+            }
+            if (cmp) {
+                cmp.innerHTML = communities.map(c => `<option value="${c}">Community ${c}</option>`).join('');
+            }
+            const selected = Number(sel?.value);
+            const modelsEl = document.getElementById('communityModelsTable');
+            if (!Number.isNaN(selected)) {
+                renderCommunityModelsTable(selected, items, commMap, metrics);
+            } else if (modelsEl) {
+                modelsEl.innerHTML = '<p class="section-description">Select a community to see its models.</p>';
+            }
+            // Normalization helpers
+            const computeNorm = (items, metrics) => {
+                const norm = {}; for (const m of metrics) {
+                    const vals = items.map(r => Number(r[m])).filter(v => !Number.isNaN(v)).sort((a,b)=>a-b);
+                    const p95 = vals.length ? (vals[Math.floor(0.95*(vals.length-1))] || vals[vals.length-1]) : 1;
+                    norm[m] = { p95: p95 || 1 };
+                } return norm;
+            };
+            const applyNorm = (series, labels, norm, enabled) => enabled ? series.map((v,i)=>Math.max(0, Math.min(1.2, (Number(v)||0)/((norm[labels[i]]?.p95)||1)))) : series;
+            const norm = computeNorm(items, metrics);
+            const redrawRadar = () => {
+                const labels = metrics;
+                const chosen = Array.from(document.querySelectorAll('.commCheck:checked')).map(el => Number(el.value));
+                let primaryLabel = 'Selected Avg';
+                let dataAraw;
+                if (chosen.length === 1) {
+                    const r = stats.find(s => s.community === chosen[0]);
+                    dataAraw = labels.map(m => (r ? (r[m]||0) : 0));
+                    primaryLabel = `Community ${chosen[0]}`;
+                } else if (chosen.length > 1) {
+                    const agg = labels.map(() => 0);
+                    chosen.forEach(cid => {
+                        const r = stats.find(s => s.community === cid);
+                        labels.forEach((m,i) => { agg[i] += (r ? (r[m]||0) : 0); });
+                    });
+                    dataAraw = agg.map(v => v / chosen.length);
+                } else {
+                    dataAraw = labels.map(() => 0);
+                }
+                const selectedOpts = [];
+                const chkOverall = document.getElementById('overallCompare');
+                if (chkOverall && chkOverall.checked) selectedOpts.push('Overall');
+                chosen.forEach(cid => selectedOpts.push(String(cid)));
+                const useNorm = document.getElementById('communityNormalize')?.checked ?? true;
+                const dataA = applyNorm(dataAraw, labels, norm, useNorm);
+                const canvas = document.getElementById('communityRadarChart');
+                if (window._commRadar) { try { window._commRadar.destroy(); } catch(_){} }
+                const datasets = [ { label: primaryLabel, data: dataA, backgroundColor:'rgba(14,165,233,0.18)', borderColor:'#0ea5e9', borderWidth:2 } ];
+                const palette = ['#8b5cf6','#f59e0b','#14b8a6','#ef4444','#a855f7','#f97316','#22c55e','#0ea5e9','#eab308','#06b6d4'];
+                let colorIdx = 0;
+                const pushSeries = (label, raw) => {
+                    const c = palette[colorIdx++ % palette.length];
+                    datasets.push({ label, data: applyNorm(raw, labels, norm, useNorm), backgroundColor: 'rgba(0,0,0,0.06)', borderColor: c, borderWidth: 2 });
+                };
+                for (const key of selectedOpts) {
+                    if (key === 'Overall') {
+                        pushSeries('Overall', labels.map(m=>overall[m]||0));
+                    } else {
+                        const cnum = Number(key);
+                        if (!Number.isNaN(cnum)) {
+                            const brow = stats.find(s => s.community === cnum);
+                            if (brow) pushSeries(`Community ${cnum}`, labels.map(m=>brow[m]||0));
+                        }
+                    }
+                }
+                window._commRadar = new Chart(canvas.getContext('2d'), {
+                    type:'radar', data:{ labels, datasets }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top' } }, scales:{ r:{ beginAtZero:true, suggestedMax:1.0 } } }
+                });
+            };
+            redrawRadar();
+            checkboxContainer.addEventListener('change', () => {
+                const checked = Array.from(document.querySelectorAll('.commCheck:checked')).map(el => Number(el.value));
+                if (checked.length === 1) {
+                    renderCommunityModelsTable(checked[0], items, commMap, metrics);
+                } else {
+                    const container = document.getElementById('communityModelsTable');
+                    container.innerHTML = '<p class="section-description">Select exactly one community to see its models.</p>';
+                }
+                redrawRadar();
+            });
+            const chk = document.getElementById('communityNormalize');
+            if (chk) chk.addEventListener('change', redrawRadar);
+        } catch (error) {
+            console.error(error);
+            const grid = document.querySelector('.dashboard-grid');
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="card-header">Community Scores</div>
+                <div class="card-content"><div id="communityError"></div></div>`;
+            grid.appendChild(card);
+            const content = card.querySelector('#communityError') || card.querySelector('.card-content') || card;
+            displayError(content, `Failed to load community data. ${error.message || error}`, async () => {
+                try { card.remove(); } catch(_){}
+                await renderCommunitySection(items);
+            });
+        }
+
+        class PromptExplorer {
+            constructor() { this.prompts = []; this.filtered = []; this.init(); }
+            async init() {
+                try { this.prompts = await fetchJSON('/api/prompt_battery'); this.populateFilters(); this.applyFilters(); this.setupEvents(); }
+                catch (e) { console.error(e); displayError(document.getElementById('promptBatteries'), `Failed to load prompts. ${e.message || e}`, () => this.init()); }
+            }
+            populateFilters() {
+                const topics = Array.from(new Set(this.prompts.map(p => p.topic)));
+                const sel = document.getElementById('topicFilter');
+                sel.innerHTML = '<option value="">All Topics</option>' + topics.map(t=>`<option value="${t}">${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('');
+            }
+            setupEvents() {
+                ['topicFilter','stanceFilter','strengthFilter','searchInput'].forEach(id => {
+                    const el = document.getElementById(id); if (el) el.addEventListener('input', ()=>this.applyFilters());
+                });
+            }
+            applyFilters() {
+                const topic = document.getElementById('topicFilter').value;
+                const stance = document.getElementById('stanceFilter').value;
+                const strength = document.getElementById('strengthFilter').value;
+                const q = document.getElementById('searchInput').value.toLowerCase();
+                this.filtered = this.prompts.filter(p => {
+                    if (topic && p.topic !== topic) return false;
+                    if (stance && String(p.stance) !== stance) return false;
+                    if (strength && String(p.strength) !== strength) return false;
+                    if (q && !p.text.toLowerCase().includes(q)) return false;
+                    return true;
+                });
+                this.renderBatteries();
+            }
+            renderBatteries() {
+                const container = document.getElementById('promptBatteries');
+                if (!this.filtered.length) { container.innerHTML = '<p class="section-description">No prompts match current filters.</p>'; return; }
+                const grouped = this.filtered.reduce((acc,p)=>{ (acc[p.topic]=acc[p.topic]||[]).push(p); return acc; }, {});
+                container.innerHTML = '';
+                for (const [topic, prompts] of Object.entries(grouped)) {
+                    const harmful = prompts.filter(p=>p.is_harmful).length; const devil = prompts.filter(p=>p.ask_devil).length;
+                    const div = document.createElement('div');
+                    div.className = 'prompt-battery';
+                    div.innerHTML = `
+                        <div class="battery-header">
+                            <div class="battery-title">${topic.charAt(0).toUpperCase()+topic.slice(1)} Battery</div>
+                            <div class="battery-stats">
+                                <div class="stat-item">${prompts.length} prompts</div>
+                                <div class="stat-item">${harmful} harmful</div>
+                                <div class="stat-item">${devil} devil's advocate</div>
+                            </div>
+                        </div>
+                        <div class="prompt-list">${prompts.map(p=>this.renderPrompt(p)).join('')}</div>`;
+                    container.appendChild(div);
+                }
+                this.setupExpanders();
+            }
+            renderPrompt(p) {
+                const preview = p.text.length>80 ? p.text.slice(0,80)+'...' : p.text;
+                const indicators = [];
+                indicators.push(p.is_harmful ? '🔴' : '🟢');
+                if (p.ask_devil) indicators.push('👹');
+                const strengthIcon = p.strength===0.8?'📈':p.strength===0.5?'📊':'📉';
+                indicators.push(strengthIcon);
+                indicators.push(p.stance===1?'👍':'👎');
+                return `
+                    <div class="prompt-item" data-prompt-id="${p.prompt_id}">
+                        <div class="prompt-header">
+                            <div class="prompt-id">${p.prompt_id}</div>
+                            <div class="prompt-preview">${preview}</div>
+                            <div class="prompt-indicators">${indicators.join(' ')}</div>
+                        </div>
+                        <div class="prompt-details">
+                            <div class="prompt-full-text">${p.text}</div>
+                            <div class="prompt-metadata">
+                                <div><div class="metadata-label">Topic</div><div class="metadata-value">${p.topic}</div></div>
+                                <div><div class="metadata-label">Stance</div><div class="metadata-value">${p.stance===1?'Positive':'Negative'}</div></div>
+                                <div><div class="metadata-label">Strength</div><div class="metadata-value">${p.strength}</div></div>
+                                <div><div class="metadata-label">Harmful</div><div class="metadata-value">${p.is_harmful? 'Yes':'No'}</div></div>
+                                <div><div class="metadata-label">Devil's Adv.</div><div class="metadata-value">${p.ask_devil? 'Yes':'No'}</div></div>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+            setupExpanders() {
+                document.querySelectorAll('.prompt-header').forEach(h => {
+                    h.addEventListener('click', () => {
+                        const item = h.closest('.prompt-item');
+                        item.classList.toggle('expanded');
+                    });
+                });
+            }
+        }
+
+        function buildNetworkUrl() {
+            const k = document.getElementById('netK').value;
+            const layout = document.getElementById('netLayout').value;
+            const url = `/api/final_results/network_png?k=${encodeURIComponent(k)}&layout=${encodeURIComponent(layout)}`;
+            return url;
+        }
+        function renderNetworkImage() {
+            const img = document.getElementById('networkImage');
+            const a = document.getElementById('netDownload');
+            const url = buildNetworkUrl();
+            img.src = url + `&t=${Date.now()}`; // bust cache
+            a.href = url;
+        }
+
+        async function initDashboard() {
+            const items = await loadFinalResults();
+            if (items && items.length) {
+                renderSIChart(items);
+                renderFinalResultsTable(items);
+                renderNetworkImage();
+                // After network, add community section
+                await renderCommunitySection(items);
+            }
+            const btn = document.getElementById('netRefresh');
+            if (btn) btn.addEventListener('click', renderNetworkImage);
+            new PromptExplorer();
+        }
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>

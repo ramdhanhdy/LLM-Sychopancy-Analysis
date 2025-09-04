@@ -11,6 +11,5 @@ leidenalg
 python-igraph
 altair
 nltk
-sentence-transformers
 python-dotenv
 tqdm

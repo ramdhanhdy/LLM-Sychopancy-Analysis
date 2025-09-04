@@ -6,3 +6,6 @@ code_from_notebook.md
 AGENTS.md
 utils/__pycache__/score_metrics_from_combined.cpython-311.pyc
 utils/__pycache__/score_metrics_from_combined.cpython-311.pyc
+sycophancy_analysis/scoring/__pycache__/__init__.cpython-311.pyc
+sycophancy_analysis/scoring/__pycache__/core.cpython-311.pyc
+sycophancy_analysis/scoring/__pycache__/*

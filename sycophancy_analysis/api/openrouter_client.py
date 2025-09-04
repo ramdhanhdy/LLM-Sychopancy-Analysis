@@ -66,6 +66,9 @@ class CallMetadata(NamedTuple):
     prompt_tokens: Optional[int]
     completion_tokens: Optional[int]
     total_tokens: Optional[int]
+    total_cost_usd: Optional[float]
+    request_units: Optional[float]
+    currency: Optional[str]
     stop_reason: Optional[str]
     request_id: Optional[str]
     response_id: Optional[str]
@@ -103,6 +106,8 @@ def chat_one(
     }
     if max_tokens is not None:
         data["max_tokens"] = max_tokens
+    # Request usage accounting (token counts, cost) from OpenRouter
+    data["usage"] = {"include": True}
     # Add reasoning config if requested; rely on OpenRouter to map to provider-specific behavior
     if reasoning_effort:
         effort = reasoning_effort.lower()
@@ -178,6 +183,21 @@ def chat_one(
                     # Extract metadata from response
                     usage = response_json.get("usage", {})
                     choice = response_json["choices"][0]
+                    # Parse cost-related fields defensively (keys can vary by provider)
+                    def _as_float(x):
+                        try:
+                            return float(x)
+                        except Exception:
+                            return None
+                    total_cost = None
+                    for k in ("total_cost", "cost", "total_cost_usd", "usd_total"):
+                        v = usage.get(k)
+                        fv = _as_float(v)
+                        if fv is not None:
+                            total_cost = fv
+                            break
+                    currency = usage.get("currency")
+                    request_units = _as_float(usage.get("request_units"))
                     
                     # Provider info from headers
                     provider_used = (
@@ -195,6 +215,9 @@ def chat_one(
                         prompt_tokens=usage.get("prompt_tokens"),
                         completion_tokens=usage.get("completion_tokens"),
                         total_tokens=usage.get("total_tokens"),
+                        total_cost_usd=total_cost,
+                        request_units=request_units,
+                        currency=currency,
                         stop_reason=choice.get("finish_reason"),
                         request_id=r.headers.get("x-request-id"),
                         response_id=response_json.get("id"),

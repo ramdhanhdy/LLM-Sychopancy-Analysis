@@ -112,7 +112,6 @@ def combine_runs_and_visualize(
     SCORING_CONFIG["USE_LLM_JUDGE"] = True
     SCORING_CONFIG["USE_REGEX"] = False
     SCORING_CONFIG["USE_STEMMING"] = False
-    SCORING_CONFIG["USE_EMBEDDINGS"] = False
     print("[combine] LLM judge enabled:", SCORING_CONFIG.get("USE_LLM_JUDGE"))
     print("[combine] judge model:", SCORING_CONFIG.get("LLM_JUDGE_MODEL"))
     print("[combine] judge temperature:", SCORING_CONFIG.get("LLM_JUDGE_TEMPERATURE"))
