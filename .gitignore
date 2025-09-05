@@ -34,3 +34,8 @@ evaluation_results/
 .DS_Store
 .vscode/
 codebase_structure.md
+sycophancy_analysis/api/__pycache__/openrouter_client.cpython-311.pyc
+sycophancy_analysis/api/__pycache__/config.cpython-311.pyc
+sycophancy_analysis/scoring/__pycache__/__init__.cpython-311.pyc
+sycophancy_analysis/scoring/__pycache__/core.cpython-311.pyc
+sycophancy_analysis/scoring/__pycache__/llm_judge.cpython-311.pyc
