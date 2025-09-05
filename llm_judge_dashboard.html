@@ -6,6 +6,18 @@
     <title>LLM-as-Judge Performance Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        (function initNav(){
+            try{
+                const params = new URLSearchParams(window.location.search);
+                const prefix = params.get('prefix') || '';
+                const navFinal = document.getElementById('navFinal');
+                const navJudge = document.getElementById('navJudge');
+                if (navFinal) navFinal.href = prefix ? (`/final?prefix=${encodeURIComponent(prefix)}`) : '/final';
+                if (navJudge) navJudge.href = prefix ? (`/judge?prefix=${encodeURIComponent(prefix)}`) : '/judge';
+            }catch(e){ /* no-op */ }
+        })();
+    </script>
     <style>
         * {
             margin: 0;
@@ -454,6 +466,11 @@
 </head>
 <body>
     <div class="container">
+        <div id="topnav" style="display:flex; justify-content:flex-start; align-items:center; gap:10px; margin-bottom:12px;">
+            <a id="navFinal" href="/final" style="text-decoration:none; color:#0b3d3a; font-weight:600;">Final Results</a>
+            <span style="color:#94a3b8;">|</span>
+            <a id="navJudge" href="/judge" style="text-decoration:none; color:#0b3d3a; font-weight:600;">Judge Dashboard</a>
+        </div>
         <div class="header">
             <h1>🧠 LLM-as-Judge Performance Dashboard</h1>
             <p>Evaluating judge models' scoring behavior across prompt batteries</p>
@@ -739,37 +756,125 @@
                     if (out) out.textContent = `Detailed results not available for ${!resA.detailed ? modelA : modelB}. Try refreshing the page.`;
                     return;
                 }
-                const mapA = new Map(resA.detailed.map(r => [r.prompt_id, r]));
-                const mapB = new Map(resB.detailed.map(r => [r.prompt_id, r]));
-                const promptIds = [...mapA.keys()].filter(id => mapB.has(id));
-                if (promptIds.length === 0) {
-                    if (out) out.textContent = 'No paired prompts found for selected models.';
-                    return;
-                }
+                // Align on (respondent model, prompt_id) keys to avoid mismatching rows across different respondents
+                const keyOf = (r) => `${r.model}||${r.prompt_id}`;
+                const mapA = new Map(resA.detailed.map(r => [keyOf(r), r]));
+                const mapB = new Map(resB.detailed.map(r => [keyOf(r), r]));
+                const keys = [...mapA.keys()].filter(k => mapB.has(k));
+                if (keys.length === 0) { if (out) out.textContent = 'No paired rows found for selected models.'; return; }
                 let bCnt = 0, cCnt = 0, pairs = 0;
-                for (const pid of promptIds) {
-                    const a = mapA.get(pid);
-                    const b = mapB.get(pid);
+                for (const k of keys) {
+                    const a = mapA.get(k);
+                    const b = mapB.get(k);
+                    // Require consistent human_eval
+                    if (!a || !b || !a.human_eval || !b.human_eval) continue;
+                    if (a.human_eval !== b.human_eval) continue;
                     const yTrue = this.labelToInt(a.human_eval);
-                    if (yTrue === null) continue;
-                    const aCorrect = (yTrue === a.pred_label);
-                    const bCorrect = (yTrue === b.pred_label);
+                    if (yTrue === null || yTrue === undefined) continue;
+                    const toPred = (v) => {
+                        if (typeof v === 'number') return v;
+                        if (typeof v === 'string') {
+                            const t = v.trim().toUpperCase();
+                            if (t === 'AGREEMENT' || t === 'CHALLENGE' || t === 'EVASION') return this.labelToInt(t);
+                            const n = Number(v); if (!Number.isNaN(n)) return n;
+                        }
+                        return null;
+                    };
+                    const pa = toPred(a.pred_label);
+                    const pb = toPred(b.pred_label);
+                    if (pa === null || pb === null) continue;
+                    const aCorrect = (yTrue === pa);
+                    const bCorrect = (yTrue === pb);
                     if (aCorrect !== bCorrect) {
                         if (!aCorrect && bCorrect) bCnt++;
-                        if (aCorrect && !bCorrect) cCnt++;
+                        else if (aCorrect && !bCorrect) cCnt++;
                     }
                     pairs++;
                 }
                 const pval = this.mcnemarPValue(bCnt, cCnt);
-                const sig05 = pval < 0.05 ? 'yes' : 'no';
-                const sig01 = pval < 0.01 ? 'yes' : 'no';
+                const sig05 = pval < 0.05;
+                const sig01 = pval < 0.01;
+                
+                // Calculate agreement and disagreement percentages
+                const totalDiscordant = bCnt + cCnt;
+                const agreementPairs = pairs - totalDiscordant;
+                const agreementPct = pairs > 0 ? ((agreementPairs / pairs) * 100).toFixed(1) : 0;
+                
+                // Determine significance level and interpretation
+                let significance = '';
+                let significanceColor = '';
+                let interpretation = '';
+                
+                if (sig01) {
+                    significance = 'Highly Significant (p < 0.01)';
+                    significanceColor = '#dc2626'; // red
+                    interpretation = 'Strong evidence that the models perform differently';
+                } else if (sig05) {
+                    significance = 'Significant (p < 0.05)';
+                    significanceColor = '#ea580c'; // orange
+                    interpretation = 'Moderate evidence that the models perform differently';
+                } else {
+                    significance = 'Not Significant (p ≥ 0.05)';
+                    significanceColor = '#16a34a'; // green
+                    interpretation = 'No strong evidence of performance difference between models';
+                }
+                
                 if (out) {
                     out.innerHTML = `
-                        <div><strong>Models:</strong> ${modelA} vs ${modelB}</div>
-                        <div><strong>Paired rows:</strong> ${pairs}</div>
-                        <div><strong>Discordant pairs:</strong> b = A wrong/B right = ${bCnt}, c = A right/B wrong = ${cCnt}</div>
-                        <div><strong>McNemar p-value (two-sided exact):</strong> ${pval.toFixed(4)}</div>
-                        <div><strong>Significant?</strong> alpha=0.05: ${sig05}, alpha=0.01: ${sig01}</div>
+                        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-top: 12px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                                <div>
+                                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 4px;">Model A</div>
+                                    <div style="font-weight: 600; color: #1f2937;">${modelA}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 4px;">Model B</div>
+                                    <div style="font-weight: 600; color: #1f2937;">${modelB}</div>
+                                </div>
+                            </div>
+                            
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                                <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+                                    <div style="font-size: 1.25rem; font-weight: 700; color: #1f2937;">${pairs}</div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">Total Pairs</div>
+                                </div>
+                                <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+                                    <div style="font-size: 1.25rem; font-weight: 700; color: #16a34a;">${agreementPairs}</div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">Agreement (${agreementPct}%)</div>
+                                </div>
+                                <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e5e7eb;">
+                                    <div style="font-size: 1.25rem; font-weight: 700; color: #dc2626;">${totalDiscordant}</div>
+                                    <div style="font-size: 0.75rem; color: #6b7280;">Disagreement</div>
+                                </div>
+                            </div>
+                            
+                            ${totalDiscordant > 0 ? `
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+                                <div style="text-align: center; padding: 8px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
+                                    <div style="font-size: 1.1rem; font-weight: 600; color: #dc2626;">${bCnt}</div>
+                                    <div style="font-size: 0.75rem; color: #7f1d1d;">A wrong, B right</div>
+                                </div>
+                                <div style="text-align: center; padding: 8px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;">
+                                    <div style="font-size: 1.1rem; font-weight: 600; color: #dc2626;">${cCnt}</div>
+                                    <div style="font-size: 0.75rem; color: #7f1d1d;">A right, B wrong</div>
+                                </div>
+                            </div>
+                            ` : ''}
+                            
+                            <div style="border-top: 1px solid #e5e7eb; padding-top: 16px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="font-weight: 600; color: #374151;">McNemar Test Result:</span>
+                                    <span style="font-weight: 700; color: ${significanceColor};">${significance}</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                    <span style="color: #6b7280;">p-value (two-sided exact):</span>
+                                    <span style="font-family: monospace; font-weight: 600; color: #1f2937;">${pval.toFixed(4)}</span>
+                                </div>
+                                <div style="font-size: 0.875rem; color: #6b7280; font-style: italic; text-align: center; padding: 8px; background: white; border-radius: 4px; border-left: 4px solid ${significanceColor};">
+                                    ${interpretation}
+                                </div>
+                            </div>
+                        </div>
                     `;
                 }
             }

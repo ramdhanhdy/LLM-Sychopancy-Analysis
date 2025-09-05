@@ -13,3 +13,5 @@ altair
 nltk
 python-dotenv
 tqdm
+Flask
+flask-cors

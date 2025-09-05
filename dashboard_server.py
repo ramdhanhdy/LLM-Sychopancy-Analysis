@@ -7,6 +7,7 @@ Serves the HTML dashboard and provides API endpoints for evaluation data
 import os
 import json
 import pandas as pd
+import numpy as np
 from flask import Flask, jsonify, send_from_directory, render_template_string, request, send_file
 from flask_cors import CORS
 import glob
@@ -17,13 +18,40 @@ import logging
 app = Flask(__name__)
 CORS(app)
 
+# Custom JSON encoder to handle NaN and infinity values
+class SafeJSONEncoder(json.JSONEncoder):
+    def encode(self, obj):
+        if isinstance(obj, dict):
+            obj = {k: self._safe_value(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            obj = [self._safe_value(v) for v in obj]
+        else:
+            obj = self._safe_value(obj)
+        return super().encode(obj)
+    
+    def _safe_value(self, value):
+        if isinstance(value, float):
+            if np.isnan(value) or np.isinf(value):
+                return None
+        elif isinstance(value, dict):
+            return {k: self._safe_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [self._safe_value(v) for v in value]
+        return value
+
+app.json_encoder = SafeJSONEncoder
+
+# Force server reload - updated CSV loading logic
+
 # Configuration (resolve paths relative to this file)
 BASE_DIR = Path(__file__).resolve().parent
 DATASET_DIR = str(BASE_DIR / "dataset")
 EVALUATION_DIR = str(BASE_DIR / "evaluation_results")
 RESULTS_DIR = str(BASE_DIR / "results")
 PROMPT_BATTERY_FILE = str(BASE_DIR / "dataset" / "prompt_battery.json")
-FINAL_RESULTS_DIR = str(BASE_DIR / "results" / "combined_run_0c_1_1b")
+
+# Default final results directory. Can be overridden via env var FINAL_RESULTS_DIR.
+DEFAULT_FINAL_RESULTS_DIR = os.environ.get("FINAL_RESULTS_DIR") or str(BASE_DIR / "results" / "combined_run_0c_1_1b")
 
 class DashboardDataLoader:
     def __init__(self):
@@ -36,8 +64,21 @@ class DashboardDataLoader:
             with open(PROMPT_BATTERY_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except FileNotFoundError:
-            print(f"Warning: {PROMPT_BATTERY_FILE} not found")
-            return []
+            print(f"Warning: {PROMPT_BATTERY_FILE} not found; falling back to programmatic battery build")
+            try:
+                # Build in-memory prompt battery from the code if file is missing
+                from sycophancy_analysis.data.prompts import build_sycophancy_battery
+                df = build_sycophancy_battery()
+                items = df.to_dict('records')
+                # Best-effort: persist for the dashboard to serve next time
+                os.makedirs(os.path.dirname(PROMPT_BATTERY_FILE), exist_ok=True)
+                with open(PROMPT_BATTERY_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(items, f, ensure_ascii=False, indent=2)
+                print(f"Rebuilt and saved prompt battery to {PROMPT_BATTERY_FILE}")
+                return items
+            except Exception as e:
+                print(f"Error rebuilding prompt battery: {e}")
+                return []
     
     def load_evaluation_results(self):
         """Load all evaluation results from CSV and JSON files"""
@@ -56,10 +97,14 @@ class DashboardDataLoader:
             detailed_ts = filename.split('_detailed_scores_')[1].rsplit('.', 1)[0]
             
             try:
-                # Load detailed scores
-                df = pd.read_csv(csv_file)
+                # Load detailed scores with proper handling of empty fields
+                df = pd.read_csv(csv_file, keep_default_na=False, na_values=[''])
                 # Replace NaN/NaT with None so JSON serialization stays standards-compliant
                 df = df.where(pd.notna(df), None)
+                # Also handle any infinity values
+                df = df.replace([float('inf'), float('-inf')], None)
+                # Convert any remaining NaN values to None
+                df = df.replace({pd.NA: None, 'nan': None, 'NaN': None})
                 
                 # Load corresponding summary file (match timestamp first, otherwise take latest)
                 summary_pattern = os.path.join(EVALUATION_DIR, f"{model_name}_summary_*.json")
@@ -408,7 +453,30 @@ class FinalResultsLoader:
         return buf
 
 
-final_loader = FinalResultsLoader(FINAL_RESULTS_DIR)
+final_loader = FinalResultsLoader(DEFAULT_FINAL_RESULTS_DIR)
+
+
+def _get_final_loader():
+    """Return a FinalResultsLoader based on optional ?prefix= path; fall back to the default loader.
+
+    Allows dashboard consumers to point at any results subfolder without changing server code.
+    """
+    try:
+        prefix = request.args.get('prefix', default=None, type=str)
+    except Exception:
+        prefix = None
+    if prefix:
+        # Accept both absolute and relative paths; restrict to existing dir
+        try:
+            p = Path(prefix)
+            # If relative, resolve against BASE_DIR
+            if not p.is_absolute():
+                p = (BASE_DIR / p).resolve()
+            if p.exists() and p.is_dir():
+                return FinalResultsLoader(str(p))
+        except Exception:
+            pass
+    return final_loader
 
 @app.route('/')
 def dashboard():
@@ -458,7 +526,22 @@ def get_model_results(model_name):
     if model_name not in data_loader.evaluation_results:
         return jsonify({'error': 'Model not found'}), 404
     
-    return jsonify(data_loader.evaluation_results[model_name])
+    # Clean the data to ensure valid JSON serialization
+    result = data_loader.evaluation_results[model_name].copy()
+    if 'detailed' in result:
+        # Convert any NaN values to None in detailed results
+        cleaned_detailed = []
+        for row in result['detailed']:
+            cleaned_row = {}
+            for k, v in row.items():
+                if pd.isna(v) or (isinstance(v, float) and (np.isnan(v) or np.isinf(v))):
+                    cleaned_row[k] = None
+                else:
+                    cleaned_row[k] = v
+            cleaned_detailed.append(cleaned_row)
+        result['detailed'] = cleaned_detailed
+    
+    return jsonify(result)
 
 @app.route('/api/prompt_scores/<prompt_id>')
 def get_prompt_scores(prompt_id):
@@ -516,27 +599,21 @@ def serve_results(filename):
 @app.route('/api/final_results/sycophancy_scores')
 def api_final_sycophancy_scores():
     """Return per-model sycophancy metrics from the combined run folder."""
-    return jsonify({
-        'run_path': str(FINAL_RESULTS_DIR),
-        'items': final_loader.sycophancy_scores(),
-    })
+    ldr = _get_final_loader()
+    return jsonify({'run_path': str(ldr.base_dir), 'items': ldr.sycophancy_scores()})
 
 @app.route('/api/final_results/sss_scores')
 def api_final_sss_scores():
     """Return SSS scores table if present."""
-    return jsonify({
-        'run_path': str(FINAL_RESULTS_DIR),
-        'items': final_loader.sss_scores(),
-    })
+    ldr = _get_final_loader()
+    return jsonify({'run_path': str(ldr.base_dir), 'items': ldr.sss_scores()})
 
 @app.route('/api/final_results/scored_rows')
 def api_final_scored_rows():
     """Return scored rows with an optional limit parameter."""
+    ldr = _get_final_loader()
     limit = request.args.get('limit', default=None, type=int)
-    return jsonify({
-        'run_path': str(FINAL_RESULTS_DIR),
-        'items': final_loader.scored_rows(limit=limit),
-    })
+    return jsonify({'run_path': str(ldr.base_dir), 'items': ldr.scored_rows(limit=limit)})
 
 @app.route('/api/final_results/network')
 def api_final_network():
@@ -545,7 +622,8 @@ def api_final_network():
         k = request.args.get('k', default=6, type=int)
     except Exception:
         k = 6
-    data = final_loader.network_data(k=k)
+    ldr = _get_final_loader()
+    data = ldr.network_data(k=k)
     return jsonify(data)
 
 @app.route('/api/final_results/network_png')
@@ -558,7 +636,8 @@ def api_final_network_png():
     umap_min_dist = request.args.get('umap_min_dist', default=0.08, type=float)
     seed = request.args.get('seed', default=42, type=int)
     bridge_threshold = request.args.get('bridge_threshold', default=0.5, type=float)
-    buf = final_loader.network_png(
+    ldr = _get_final_loader()
+    buf = ldr.network_png(
         knn_k=knn_k,
         layout=layout,
         leiden_resolution=leiden_res,
@@ -577,7 +656,7 @@ if __name__ == '__main__':
     print(f"Loaded {len(data_loader.evaluation_results)} model evaluations")
     print("Available models:", data_loader.get_model_list())
     print("Available topics:", data_loader.get_topics())
-    print("Final results path:", FINAL_RESULTS_DIR)
+    print("Final results path (default):", DEFAULT_FINAL_RESULTS_DIR)
 
     # Environment-driven startup configuration
     def _str_to_bool(val: str) -> bool:
