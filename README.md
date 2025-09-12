@@ -56,6 +56,59 @@ Notes
 - Combine prior runs and rescore with the LLM judge (recommended):
   - `uv run python utils/combine_runs.py --prefixes results/run_001,results/run_002 --save_prefix results/combined_001_002 --api_key $OPENROUTER_API_KEY`
 
+### Combine latest run with an existing combined file (no in-place changes)
+
+Create a new merged JSON from an existing combined JSON and a latest run, without modifying the originals. The tool deduplicates by `(model, prompt_id)` keeping the newest by `run_id`.
+
+- Windows (PowerShell):
+
+```
+uv run python utils/combine_responses.py `
+  "results/combined_run_0c_1_1b/responses_combined.json" `
+  "results/run_2b/responses/run_20250912_190809/responses.json" `
+  --output "results/combined_run_0c_1_1b_2b/responses_combined.json" `
+  --format json `
+  --pretty `
+  --dedup-strategy latest
+```
+
+Notes:
+- Omit `--append-to` if you do not want to touch `results/final_responses.json`.
+- JSON and JSONL inputs are supported; you can also use the per-run CSV if preferred.
+- The output path controls where the new combined file is written.
+
+### Build a text-based model network from RAW responses
+
+This creates a new model-level network using TF‑IDF cosine similarity over the raw response text (independent of SSS). It does not affect the existing stylometry-based chart.
+
+- Windows (PowerShell):
+
+```
+uv run python utils/build_text_network.py `
+  "results/combined_run_0c_1_1b_2b/responses_combined.json" `
+  --save_prefix "results/textnet_0c_1_1b_2b" `
+  --knn_k 8 `
+  --leiden_resolution 1.0 `
+  --bridge_threshold 0.5 `
+  --stop_words english `
+  --min_df 2 `
+  --ngram_max 2 `
+  --fig_width 20 `
+  --fig_height 22
+```
+
+What it does:
+- Keeps the latest response per `(model, prompt_id)`.
+- Concatenates each model’s responses into a single document.
+- Computes TF‑IDF features and cosine similarity between models.
+- Builds a k‑NN graph (Leiden communities) and MST backbone.
+
+Outputs (under the chosen `--save_prefix`):
+- `text_network.png` — network image. Use `--fig_height/--fig_width` to control size.
+- `text_heatmap.html` — similarity heatmap (saved if Altair is available).
+- `model_response_counts.csv` — per‑model counts of unique prompts extracted.
+- Matrices + metadata via `save_matrices()` and `save_metadata()`.
+
 ## Outputs
 
 Using `--save_prefix results/run_001` produces:
@@ -133,4 +186,3 @@ For metric definitions, see `docs/sycophancy_index_metrics.md`. For a deeper div
 ---
 
 Security: Never commit API keys. Use `.env` or CI secrets and pass `--api_key` explicitly when needed.
-

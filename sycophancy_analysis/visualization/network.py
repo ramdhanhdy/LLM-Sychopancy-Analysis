@@ -290,6 +290,7 @@ def plot_network(
     admixtures: Optional[List[Dict]] = None,
     title: str = "LLM Sychopantic Behavioral Network",
     bridge_threshold: float = 0.5,
+    figsize: Optional[Tuple[float, float]] = None,
 ) -> plt.Figure:
     """Create network visualization plot."""
     G = G_backbone.copy()
@@ -316,7 +317,8 @@ def plot_network(
     bridges = [nm for nm in G.nodes() if P.get(nm, 0.0) >= bridge_threshold]
 
     plt.style.use("dark_background")
-    fig, ax = plt.subplots(figsize=(20, 15), facecolor=bg)
+    _figsize = figsize if figsize is not None else (20, 15)
+    fig, ax = plt.subplots(figsize=_figsize, facecolor=bg)
     ax.set_facecolor(bg)
 
     # Vignette

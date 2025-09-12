@@ -13,19 +13,19 @@ SCORING_CONFIG = {
     "USE_LLM_JUDGE": True,
     # LLM Judge settings (uses OpenRouter)
     # OPENROUTER_API_KEY must be set in environment or passed via CLI.
-    "LLM_JUDGE_MODEL": "qwen/qwen3-235b-a22b-2507",
+    "LLM_JUDGE_MODEL": "openrouter/sonoma-dusk-alpha",
     "LLM_JUDGE_TEMPERATURE": 0.0,
     "LLM_JUDGE_MAX_TOKENS": 800,
     # Provider routing preferences for LLM judge (OpenRouter).
     # Force Cerebras by default; you can override via env or editing this config.
     # See: https://openrouter.ai/docs/features/provider-routing
-    "LLM_JUDGE_PROVIDER_PREFS": {
-        "only": ["cerebras"],
-        "order": ["cerebras"],
-        "allow_fallbacks": False,
+    "LLM_JUDGE_PROVIDER_PREFS": None
+        # "only": [],
+        # "order": [],
+        # "allow_fallbacks": True,
         # Set require_parameters if you want to error instead of silently ignoring unsupported params
         # "require_parameters": True,
-    },
+    ,
     # LLM judge only: optional per-model or per-tag overrides for judge behavior
     # Params: adjust judge runtime (temperature, max_tokens) based on the model being judged
     "LLM_JUDGE_PARAMS_OVERRIDES": {
@@ -45,16 +45,12 @@ SCORING_CONFIG = {
 
 # Model configurations for analysis
 MODEL_CONFIGS = [
-    {"name": "Gpt 5", "slug": "openai/gpt-5-chat"},
-    {"name": "Gpt 4.1", "slug": "openai/gpt-4.1"},
-    {"name": "Gpt 4o Mini", "slug": "openai/gpt-4o-mini"},
-    {"name": "Gpt 4.1 mini", "slug": "openai/gpt-4.1-mini"},
-    {"name": "Gpt 5 mini", "slug": "openai/gpt-5-mini"},
-    {"name": "MAI DS R1", "slug": "microsoft/mai-ds-r1"},
-    {"name": "Claude 3.5 Haiku", "slug": "anthropic/claude-3.5-haiku"},
-    {"name": "Gemini 2.0 flash", "slug": "google/gemini-2.0-flash-001"},
-    {"name": "Llama 3.3 70b", "slug": "meta-llama/llama-3.3-70b-instruct"},
-    {"name": "Gemma 3 12b", "slug": "google/gemma-3-12b-it"},
+    {"name": "Sonama Dusk Alpha", "slug": "openrouter/sonoma-dusk-alpha"},
+    {"name": "Sonama Sky Alpha", "slug": "openrouter/sonoma-sky-alpha"},
+    {"name": "Kimi K2", "slug": "moonshotai/kimi-k2-0905"},
+    {"name": "Qwen 3 Max", "slug": "qwen/qwen3-max"},
+    {"name": "Hermes 4 405B", "slug": "nousresearch/hermes-4-405b"},
+    {"name": "Hermes 4 70B", "slug": "nousresearch/hermes-4-70b"},
 ]
 
 # Output format configuration

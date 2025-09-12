@@ -67,6 +67,37 @@ def _parse_source(path: Path) -> Tuple[str, str]:
     return source_run, run_id
 
 
+def _discover_response_csvs(prefixes: Optional[List[str]] = None) -> List[Path]:
+    """Discover responses.csv files under provided run prefixes or globally under results/.
+
+    Supports both new (results/run_X/responses/run_YYYYMMDD_HHMMSS/responses.csv)
+    and legacy (results/run_X/results/responses/run_*/responses.csv) layouts.
+    """
+    candidates: List[Path] = []
+    if prefixes:
+        for p in prefixes:
+            base = Path(p)
+            # New layout
+            candidates.extend(sorted(base.glob("responses/run_*/responses.*")))
+            # Legacy layout
+            candidates.extend(sorted((base / "results").glob("responses/run_*/responses.*")))
+    else:
+        root = Path("results")
+        # New layout across all runs
+        candidates.extend(sorted(root.glob("run_*/responses/run_*/responses.*")))
+        # Legacy layout across all runs
+        candidates.extend(sorted(root.glob("run_*/results/responses/run_*/responses.*")))
+    # De-duplicate paths
+    seen = set()
+    out: List[Path] = []
+    for c in candidates:
+        s = str(c)
+        if s not in seen:
+            seen.add(s)
+            out.append(c)
+    return out
+
+
 def _load_prompt_battery(battery_path: Path) -> Dict[str, dict]:
     """Load prompt battery and return a mapping prompt_id -> meta dict.
     Expected keys per prompt: prompt_id, text, topic, persona, stance, strength, is_harmful, ask_devil
@@ -117,6 +148,53 @@ def _normalize_dataframe(df: pd.DataFrame, src_path: Path) -> pd.DataFrame:
     return df
 
 
+def _filter_error_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop rows that represent failed API calls or empty responses.
+
+    Heuristics:
+    - drop if stop_reason == 'error'
+    - drop if response is null/empty
+    - drop if http_status is present and not 200
+    """
+    if df.empty:
+        return df
+    dd = df.copy()
+    # Normalize response to string to check emptiness reliably
+    resp_col = dd.get("response")
+    if resp_col is not None:
+        dd["__resp_empty__"] = resp_col.isna() | (resp_col.astype(str).str.strip() == "")
+    else:
+        dd["__resp_empty__"] = True
+    # stop_reason
+    stop_col = dd.get("stop_reason")
+    is_error = (stop_col.astype(str).str.lower() == "error") if stop_col is not None else False
+    # http status
+    if "http_status" in dd.columns:
+        try:
+            hs = pd.to_numeric(dd["http_status"], errors="coerce")
+        except Exception:
+            hs = pd.Series([pd.NA] * len(dd))
+        bad_status = hs.notna() & (hs.astype(float) != 200.0)
+    else:
+        bad_status = False
+    mask_keep = (~dd["__resp_empty__"]) & (~is_error) & (~bad_status)
+    dd = dd[mask_keep].drop(columns=["__resp_empty__"], errors="ignore")
+    return dd
+
+
+def _add_run_datetime(df: pd.DataFrame) -> pd.DataFrame:
+    """Extract timestamp from run_id like 'run_YYYYMMDD_HHMMSS' into a datetime column for sorting."""
+    if df.empty:
+        return df
+    if "run_id" not in df.columns:
+        df["run_id"] = pd.NA
+    ts = (
+        df["run_id"].astype(str).str.replace("run_", "", regex=False)
+    )
+    df["run_datetime"] = pd.to_datetime(ts, errors="coerce", format="%Y%m%d_%H%M%S")
+    return df
+
+
 def _unionize_columns(frames: List[pd.DataFrame]) -> List[pd.DataFrame]:
     """Add any missing columns across frames as NA to achieve a consistent schema."""
     all_cols: List[str] = []
@@ -152,8 +230,52 @@ def _attach_prompt_meta(df: pd.DataFrame, meta_map: Dict[str, dict]) -> pd.DataF
     return df
 
 
+def _read_table(path: Path) -> pd.DataFrame:
+    """Read a tabular file (CSV, JSON, JSONL) into a DataFrame.
+
+    - For JSON, expects an array of records.
+    - For JSONL, expects one JSON object per line.
+    - Ensures prompt_id is str if present.
+    """
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".csv":
+            df = pd.read_csv(path, dtype={"prompt_id": str}, keep_default_na=False)
+        elif suffix == ".json":
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            df = pd.DataFrame(data)
+            if "prompt_id" in df.columns:
+                df["prompt_id"] = df["prompt_id"].astype(str)
+        elif suffix == ".jsonl":
+            records: List[dict] = []
+            with path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        records.append(json.loads(line))
+                    except Exception:
+                        pass
+            df = pd.DataFrame(records)
+            if "prompt_id" in df.columns:
+                df["prompt_id"] = df["prompt_id"].astype(str)
+        else:
+            # Fallback: try CSV parser
+            df = pd.read_csv(path)
+            if "prompt_id" in df.columns:
+                df["prompt_id"] = df["prompt_id"].astype(str)
+    except Exception:
+        # Last-resort fallback
+        df = pd.read_csv(path)
+        if "prompt_id" in df.columns:
+            df["prompt_id"] = df["prompt_id"].astype(str)
+    return df
+
+
 def combine_responses_files(
-    inputs: Iterable[os.PathLike | str],
+    inputs: Iterable[os.PathLike | str] | None,
     *,
     output: os.PathLike | str,
     attach_prompt_meta: bool = True,
@@ -161,6 +283,10 @@ def combine_responses_files(
     dedup_keys: Tuple[str, str] = ("model", "prompt_id"),
     output_format: Optional[str] = None,  # 'json', 'jsonl', 'csv' or None to infer by extension
     pretty: bool = False,
+    filter_errors: bool = True,
+    dedup_strategy: str = "latest",  # 'latest' or 'priority'
+    append_to: Optional[os.PathLike | str] = None,
+    prefixes: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     """Combine CSVs and write to output. Returns the combined DataFrame.
 
@@ -171,19 +297,18 @@ def combine_responses_files(
     - output_format: override format detection ('json', 'jsonl', 'csv')
     - pretty: pretty-print JSON output
     """
-    in_paths = [Path(p) for p in inputs]
+    # Determine inputs
+    if inputs is None or (isinstance(inputs, Iterable) and not list(inputs)):
+        in_paths = _discover_response_csvs(prefixes)
+    else:
+        in_paths = [Path(p) for p in inputs]
     frames: List[pd.DataFrame] = []
     for p in in_paths:
         if not p.exists():
             print(f"[combine_responses] WARN: missing input {p}")
             continue
-        try:
-            df = pd.read_csv(p, dtype={"prompt_id": str}, keep_default_na=False)
-        except Exception:
-            # Try with default parser
-            df = pd.read_csv(p)
-            if "prompt_id" in df.columns:
-                df["prompt_id"] = df["prompt_id"].astype(str)
+        # Read CSV/JSON/JSONL
+        df = _read_table(p)
         df = _normalize_dataframe(df, p)
         frames.append(df)
     if not frames:
@@ -191,6 +316,10 @@ def combine_responses_files(
 
     frames = _unionize_columns(frames)
     df_all = pd.concat(frames, ignore_index=True)
+
+    # Filter out error rows if requested
+    if filter_errors:
+        df_all = _filter_error_rows(df_all)
 
     # Attach prompt metadata
     if attach_prompt_meta:
@@ -202,11 +331,21 @@ def combine_responses_files(
     # Deduplicate if requested
     removed = 0
     if dedup and len(df_all) > 0:
-        # Keep highest priority per key
-        sort_cols = list(dedup_keys) + ["source_priority"]
-        df_all = df_all.sort_values(sort_cols, ascending=[True, True, False], kind="mergesort")
+        if dedup_strategy == "latest":
+            df_all = _add_run_datetime(df_all)
+            # Sort by model, prompt, then run_datetime ascending; keep last
+            sort_cols = list(dedup_keys) + ["run_datetime", "source_priority"]
+            df_all = df_all.sort_values(
+                sort_cols,
+                ascending=[True, True, True, False],
+                kind="mergesort",
+            )
+        else:
+            # Legacy: keep highest source_priority per key
+            sort_cols = list(dedup_keys) + ["source_priority"]
+            df_all = df_all.sort_values(sort_cols, ascending=[True, True, False], kind="mergesort")
         before = len(df_all)
-        df_all = df_all.drop_duplicates(subset=list(dedup_keys), keep="first")
+        df_all = df_all.drop_duplicates(subset=list(dedup_keys), keep="last")
         removed = before - len(df_all)
 
     # Ensure output directory exists
@@ -229,6 +368,8 @@ def combine_responses_files(
     # Normalize NaNs to None for JSON
     if fmt in ("json", "jsonl"):
         df_json = df_all.replace({np.nan: None})
+        # Drop helper column that contains pandas.Timestamp (not JSON-serializable)
+        df_json = df_json.drop(columns=["run_datetime"], errors="ignore")
 
     # Write
     if fmt == "jsonl":
@@ -246,6 +387,28 @@ def combine_responses_files(
         df_all.to_csv(out_path, index=False)
     else:
         raise ValueError(f"Unsupported output format: {fmt}")
+
+    # Optionally append/merge into a final aggregated JSON
+    if append_to:
+        final_path = Path(append_to)
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        if final_path.exists():
+            try:
+                with final_path.open("r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                df_existing = pd.DataFrame(existing)
+            except Exception:
+                df_existing = pd.DataFrame([])
+        else:
+            df_existing = pd.DataFrame([])
+        # Concatenate and dedup by latest run
+        merged = pd.concat([df_existing, df_all], ignore_index=True)
+        merged = _add_run_datetime(merged)
+        merged = merged.sort_values(["model", "prompt_id", "run_datetime"], ascending=[True, True, True], kind="mergesort")
+        merged = merged.drop_duplicates(subset=["model", "prompt_id"], keep="last")
+        merged = merged.replace({np.nan: None})
+        with final_path.open("w", encoding="utf-8") as f:
+            json.dump(merged.to_dict(orient="records"), f, ensure_ascii=False, indent=2)
 
     # Summary
     by_source = df_all.groupby("source_run", dropna=False)["prompt_id"].count().sort_index()
@@ -266,8 +429,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument(
         "inputs",
         nargs="*",
-        help="Input CSVs (default: known three scattered files)",
-        default=DEFAULT_INPUTS,
+        help="Input CSVs (overrides auto-discovery if provided).",
+        default=[],
     )
     parser.add_argument(
         "--output",
@@ -296,15 +459,43 @@ def main(argv: Optional[List[str]] = None) -> None:
         action="store_true",
         help="Do not attach prompt metadata from dataset/prompt_battery.json",
     )
+    parser.add_argument(
+        "--prefixes",
+        type=str,
+        default=None,
+        help="Comma-separated run prefixes (e.g., 'results/run_0,results/run_1b'). If omitted and no inputs are provided, auto-discovers under results/.",
+    )
+    parser.add_argument(
+        "--include-errors",
+        action="store_true",
+        help="Include error rows (by default, error/empty responses are dropped)",
+    )
+    parser.add_argument(
+        "--dedup-strategy",
+        choices=["latest", "priority"],
+        default="latest",
+        help="How to choose among duplicates for (model,prompt_id): 'latest' by run_id timestamp (default) or 'priority' by source_priority.",
+    )
+    parser.add_argument(
+        "--append-to",
+        type=str,
+        default=None,
+        help="Path to a final aggregated JSON file to merge into (dedup by latest).",
+    )
     args = parser.parse_args(argv)
 
+    prefixes = [p.strip() for p in (args.prefixes.split(",") if args.prefixes else []) if p.strip()]
     combine_responses_files(
-        inputs=args.inputs,
+        inputs=args.inputs if args.inputs else None,
         output=args.output,
         attach_prompt_meta=not args.no_prompt_meta,
         dedup=not args.keep_all,
         output_format=args.format,
         pretty=args.pretty,
+        filter_errors=not args.include_errors,
+        dedup_strategy=args.dedup_strategy,
+        append_to=args.append_to,
+        prefixes=prefixes or None,
     )
 
 
