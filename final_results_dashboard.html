@@ -60,6 +60,68 @@
                 <div class="card-content"><div style="height:340px;"><canvas id="siPerModelChart"></canvas></div></div>
             </div>
             <div class="card">
+                <div class="card-header">🧭 Sycophancy vs Stability — Quadrant Analysis</div>
+                <div class="card-content">
+                    <div style="height:550px;"><canvas id="elasticityChart"></canvas></div>
+                    <div id="elasticityExplanation" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-top:16px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                            <h4 style="margin:0; color:#1e293b; font-size:1.1rem;">📊 Chart Guide</h4>
+                            <button id="toggleElasticityDesc" style="background:#64748b; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:0.8rem;">Show</button>
+                        </div>
+                        <div id="elasticityDescContent" style="display:none;">
+                            <p style="margin:0 0 12px 0; color:#475569; line-height:1.5;">
+                                This chart helps identify how <strong>predictable</strong> and <strong>reliable</strong> each AI model is when responding to user opinions. 
+                                Think of it like a personality test for AI models - some are consistent and trustworthy, others are unpredictable.
+                            </p>
+                            
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                                <div>
+                                    <strong style="color:#1e293b;">📊 X-Axis (Left ↔ Right):</strong><br>
+                                    <span style="color:#64748b; font-size:0.9rem;">How much the model changes its agreement based on <em>how strongly</em> you express your opinion</span>
+                                    <ul style="margin:4px 0 0 16px; color:#64748b; font-size:0.85rem;">
+                                        <li><strong>Left:</strong> Consistent - doesn't get swayed by your tone</li>
+                                        <li><strong>Right:</strong> Sycophantic - agrees more when you sound confident</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <strong style="color:#1e293b;">📈 Y-Axis (Bottom ↔ Top):</strong><br>
+                                    <span style="color:#64748b; font-size:0.9rem;">How much the model's baseline agreeableness varies between different <em>topics</em></span>
+                                    <ul style="margin:4px 0 0 16px; color:#64748b; font-size:0.85rem;">
+                                        <li><strong>Bottom:</strong> Topic-consistent - same personality across subjects</li>
+                                        <li><strong>Top:</strong> Topic-dependent - different personality per topic</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <h4 style="margin:12px 0 8px 0; color:#1e293b; font-size:1rem;">🎯 The Four Behavioral Types</h4>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; font-size:0.85rem;">
+                                <div style="padding:8px; background:rgba(34, 197, 94, 0.1); border-radius:6px; border-left:3px solid #22c55e;">
+                                    <strong style="color:#15803d;">✅ Most Stable (Bottom-Left)</strong><br>
+                                    <span style="color:#166534;">Ideal for critical applications. Consistent responses regardless of your tone or the topic. Most trustworthy and predictable.</span>
+                                </div>
+                                <div style="padding:8px; background:rgba(59, 130, 246, 0.1); border-radius:6px; border-left:3px solid #3b82f6;">
+                                    <strong style="color:#1d4ed8;">⚖️ Stance-Responsive (Bottom-Right)</strong><br>
+                                    <span style="color:#1e40af;">Consistent across topics but influenced by your confidence level. May agree more when you sound certain.</span>
+                                </div>
+                                <div style="padding:8px; background:rgba(245, 158, 11, 0.1); border-radius:6px; border-left:3px solid #f59e0b;">
+                                    <strong style="color:#d97706;">📚 Topic-Dependent (Top-Left)</strong><br>
+                                    <span style="color:#b45309;">Different personality for different subjects (e.g., more agreeable about health than politics) but consistent with your tone.</span>
+                                </div>
+                                <div style="padding:8px; background:rgba(239, 68, 68, 0.1); border-radius:6px; border-left:3px solid #ef4444;">
+                                    <strong style="color:#dc2626;">⚠️ Highly Variable (Top-Right)</strong><br>
+                                    <span style="color:#b91c1c;">Most unpredictable. Changes behavior based on both topic AND your tone. Use with caution in important applications.</span>
+                                </div>
+                            </div>
+                            
+                            <p style="margin:12px 0 0 0; color:#475569; font-size:0.9rem; font-style:italic;">
+                                💡 <strong>Quick Guide:</strong> For reliable, trustworthy AI assistance, choose models from the green quadrant. 
+                                Avoid red quadrant models for important decisions.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
                 <div class="card-header">📋 Per-Model Metrics</div>
                 <div class="card-content"><div id="finalResultsTable"></div></div>
             </div>
@@ -152,6 +214,209 @@
             });
         }
 
+        async function loadElasticityData() {
+            try {
+                const res = await fetchJSON(withPrefix('/api/final_results/stance_elasticity'));
+                return res || { items: [], summary: {} };
+            } catch (e) {
+                console.error(e);
+                displayError('#elasticityChart', `Failed to load stance elasticity metrics. ${e.message || e}`);
+                return { items: [], summary: {} };
+            }
+        }
+
+        function renderElasticityChartPayload(payload) {
+            const canvas = document.getElementById('elasticityChart');
+            if (!canvas) return;
+            const items = (payload && payload.items) ? payload.items : [];
+            const summary = (payload && payload.summary) ? payload.summary : {};
+            if (!items.length) { canvas.parentElement.innerHTML = '<p class="section-description">No data available for stance elasticity.</p>'; return; }
+            if (typeof window.Chart === 'undefined') { canvas.parentElement.innerHTML = '<p class="section-description">Chart.js not loaded.</p>'; return; }
+
+            // Build scatter points - note: swapped x/y to match notebook layout
+            const points = items.map(r => ({
+                x: r.elasticity_var,  // X-axis: stance-responsiveness variability
+                y: r.topic_dispersion_wMAD,  // Y-axis: topic-dependent dispersion
+                model: r.model,
+                topics_used: r.topics_used
+            })).filter(p => typeof p.x === 'number' && typeof p.y === 'number');
+
+            if (!points.length) { canvas.parentElement.innerHTML = '<p class="section-description">No numeric points to plot.</p>'; return; }
+
+            const minX = Math.min(...points.map(p=>p.x));
+            const maxX = Math.max(...points.map(p=>p.x));
+            const minY = Math.min(...points.map(p=>p.y));
+            const maxY = Math.max(...points.map(p=>p.y));
+
+            // Note: summary medians are for (topic_dispersion_wMAD, elasticity_var) but we swapped axes
+            const xMed = summary && typeof summary.y_median === 'number' ? summary.y_median : (minX+maxX)/2;  // elasticity_var median
+            const yMed = summary && typeof summary.x_median === 'number' ? summary.x_median : (minY+maxY)/2;  // topic_dispersion_wMAD median
+
+            const pad = 0.05; // 5% padding
+            const xSpan = (maxX - minX) || 1;
+            const ySpan = (maxY - minY) || 1;
+            const xMin = minX - xSpan*pad;
+            const xMax = maxX + xSpan*pad;
+            const yMin = minY - ySpan*pad;
+            const yMax = maxY + ySpan*pad;
+
+            // Quadrant background colors (matching notebook analysis)
+            const quadrantColors = {
+                bottomLeft: 'rgba(34, 197, 94, 0.15)',   // green: Most Stable (low elasticity, low dispersion)
+                bottomRight: 'rgba(59, 130, 246, 0.15)', // blue: Stance-Responsive but Topic-Consistent (high elasticity, low dispersion)
+                topLeft: 'rgba(245, 158, 11, 0.15)',     // amber: Topic-Dependent but Stance-Consistent (low elasticity, high dispersion)
+                topRight: 'rgba(239, 68, 68, 0.15)'      // red: Highly Variable - Most Concerning (high elasticity, high dispersion)
+            };
+
+            const datasets = [
+                // Median guide lines
+                {
+                    type: 'line',
+                    label: 'Median X',
+                    data: [ {x: xMed, y: yMin}, {x: xMed, y: yMax} ],
+                    parsing: false,
+                    borderColor: '#94a3b8',
+                    borderDash: [6,6],
+                    pointRadius: 0,
+                    fill: false,
+                },
+                {
+                    type: 'line',
+                    label: 'Median Y',
+                    data: [ {x: xMin, y: yMed}, {x: xMax, y: yMed} ],
+                    parsing: false,
+                    borderColor: '#94a3b8',
+                    borderDash: [6,6],
+                    pointRadius: 0,
+                    fill: false,
+                },
+                // Model points (invisible - we'll draw text labels instead)
+                {
+                    type: 'scatter',
+                    label: 'Models',
+                    data: points,
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent',
+                    pointRadius: 0,
+                }
+            ];
+
+            // Custom plugin to draw quadrant backgrounds and model labels
+            const quadrantPlugin = {
+                id: 'quadrantBackgroundAndLabels',
+                beforeDraw: (chart) => {
+                    const ctx = chart.ctx;
+                    const chartArea = chart.chartArea;
+                    const xScale = chart.scales.x;
+                    const yScale = chart.scales.y;
+                    
+                    const xMedPixel = xScale.getPixelForValue(xMed);
+                    const yMedPixel = yScale.getPixelForValue(yMed);
+                    
+                    ctx.save();
+                    
+                    // Draw quadrant backgrounds
+                    ctx.fillStyle = quadrantColors.bottomLeft;
+                    ctx.fillRect(chartArea.left, yMedPixel, xMedPixel - chartArea.left, chartArea.bottom - yMedPixel);
+                    
+                    ctx.fillStyle = quadrantColors.bottomRight;
+                    ctx.fillRect(xMedPixel, yMedPixel, chartArea.right - xMedPixel, chartArea.bottom - yMedPixel);
+                    
+                    ctx.fillStyle = quadrantColors.topLeft;
+                    ctx.fillRect(chartArea.left, chartArea.top, xMedPixel - chartArea.left, yMedPixel - chartArea.top);
+                    
+                    ctx.fillStyle = quadrantColors.topRight;
+                    ctx.fillRect(xMedPixel, chartArea.top, chartArea.right - xMedPixel, yMedPixel - chartArea.top);
+                    
+                    // Draw model names as text labels
+                    ctx.font = '11px system-ui, -apple-system, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = '#374151';
+                    
+                    points.forEach(point => {
+                        const xPixel = xScale.getPixelForValue(point.x);
+                        const yPixel = yScale.getPixelForValue(point.y);
+                        
+                        // Only draw if within chart area
+                        if (xPixel >= chartArea.left && xPixel <= chartArea.right && 
+                            yPixel >= chartArea.top && yPixel <= chartArea.bottom) {
+                            
+                            // Truncate long model names
+                            let displayName = point.model;
+                            if (displayName.length > 20) {
+                                displayName = displayName.substring(0, 17) + '...';
+                            }
+                            
+                            // Add slight background for readability
+                            const textWidth = ctx.measureText(displayName).width;
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                            ctx.fillRect(xPixel - textWidth/2 - 2, yPixel - 6, textWidth + 4, 12);
+                            
+                            // Draw text
+                            ctx.fillStyle = '#374151';
+                            ctx.fillText(displayName, xPixel, yPixel);
+                        }
+                    });
+                    
+                    ctx.restore();
+                }
+            };
+
+            if (window._elasticityChart) try { window._elasticityChart.destroy(); } catch(_){}
+            window._elasticityChart = new Chart(canvas.getContext('2d'), {
+                type: 'scatter',
+                data: { datasets },
+                plugins: [quadrantPlugin],
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Stance-responsiveness variability (elasticity variance)' },
+                            min: xMin,
+                            max: xMax
+                        },
+                        y: { 
+                            title: { display: true, text: 'Topic-tilt dispersion (wMAD of endorsement across topics)' },
+                            min: yMin,
+                            max: yMax
+                        },
+                    },
+                    plugins: {
+                        legend: { 
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                generateLabels: () => [
+                                    { text: 'Most Stable', fillStyle: quadrantColors.bottomLeft, strokeStyle: quadrantColors.bottomLeft },
+                                    { text: 'Stance-Responsive but Topic-Consistent', fillStyle: quadrantColors.bottomRight, strokeStyle: quadrantColors.bottomRight },
+                                    { text: 'Topic-Dependent but Stance-Consistent', fillStyle: quadrantColors.topLeft, strokeStyle: quadrantColors.topLeft },
+                                    { text: 'Highly Variable (Most Concerning)', fillStyle: quadrantColors.topRight, strokeStyle: quadrantColors.topRight }
+                                ]
+                            }
+                        },
+                        tooltip: {
+                            filter: (item) => item.datasetIndex === datasets.length - 1, // Only show for model points
+                            callbacks: {
+                                label: (ctx) => {
+                                    const p = ctx.raw;
+                                    if (p && typeof p === 'object' && 'model' in p) {
+                                        // Determine quadrant based on notebook analysis
+                                        const quadrant = p.x < xMed ? 
+                                            (p.y < yMed ? 'Most Stable' : 'Topic-Dependent but Stance-Consistent') :
+                                            (p.y < yMed ? 'Stance-Responsive but Topic-Consistent' : 'Highly Variable');
+                                        return [`${p.model}`, `Elasticity Var: ${p.x.toFixed(3)}`, `Topic Dispersion: ${p.y.toFixed(3)}`, `Topics: ${p.topics_used ?? 'n/a'}`, `Zone: ${quadrant}`];
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         function buildNetworkUrl() {
             const k = document.getElementById('netK').value;
             const layout = document.getElementById('netLayout').value;
@@ -181,8 +446,26 @@
         async function initDashboard() {
             const items = await loadFinalResults();
             if (items && items.length) { renderSIChart(items); renderFinalResultsTable(items); }
+            // Elasticity scatter
+            try { const payload = await loadElasticityData(); renderElasticityChartPayload(payload); } catch(e) { console.error(e); }
             renderNetworkImage();
             const btn = document.getElementById('netRefresh'); if (btn) btn.addEventListener('click', renderNetworkImage);
+            
+            // Setup elasticity description toggle
+            const toggleBtn = document.getElementById('toggleElasticityDesc');
+            const content = document.getElementById('elasticityDescContent');
+            if (toggleBtn && content) {
+                toggleBtn.addEventListener('click', () => {
+                    const isHidden = content.style.display === 'none';
+                    
+                    // Toggle content visibility
+                    content.style.display = isHidden ? 'block' : 'none';
+                    
+                    // Update button text
+                    toggleBtn.textContent = isHidden ? 'Hide' : 'Show';
+                });
+            }
+            
             new PromptExplorer();
         }
         document.addEventListener('DOMContentLoaded', initDashboard);

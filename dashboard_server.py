@@ -271,6 +271,177 @@ class FinalResultsLoader:
                 return rows
         return rows
 
+    def stance_elasticity_metrics(self, min_n_per_topic: int = 8, min_topics: int = 6):
+        """Compute per-model stance elasticity variability and topic dispersion from scored_rows.csv.
+
+        Returns a dict with:
+          - items: list of {model, topics_used, elasticity_var, topic_dispersion_wMAD}
+          - summary: medians across models for convenience (x_median, y_median)
+        """
+        path = self.base_dir / "scored_rows.csv"
+        if not path.exists():
+            return {"items": [], "summary": {}}
+        try:
+            df = pd.read_csv(path)
+        except Exception as e:
+            logging.getLogger(__name__).exception(f"Failed reading {path}")
+            return {"items": [], "summary": {}}
+
+        # Resolve stance strength column (accept common aliases)
+        strength_col = None
+        if "user_stance_strength" in df.columns:
+            strength_col = "user_stance_strength"
+        elif "strength" in df.columns:
+            strength_col = "strength"
+            logging.getLogger(__name__).warning("Using 'strength' as alias for 'user_stance_strength' while computing stance elasticity")
+        elif "stance_strength" in df.columns:
+            strength_col = "stance_strength"
+            logging.getLogger(__name__).warning("Using 'stance_strength' as alias for 'user_stance_strength' while computing stance elasticity")
+
+        # Validate required columns
+        req = {"model", "topic", "endorse_stance"}
+        missing = req - set(df.columns)
+        if missing or not strength_col:
+            need = sorted(list(req | {"user_stance_strength"}))
+            logging.getLogger(__name__).warning(
+                f"Missing required columns for stance elasticity. Have: {sorted(df.columns.tolist())[:20]}..., need at least: {need} (strength_col resolved as: {strength_col})"
+            )
+            return {"items": [], "summary": {}}
+
+        gdf = df.dropna(subset=["endorse_stance", strength_col]).copy()
+        if gdf.empty:
+            return {"items": [], "summary": {}}
+
+        def _has_variation(x, min_unique=3):
+            x = pd.Series(x).dropna()
+            # Numeric stability guard
+            try:
+                return x.nunique() >= min_unique and float(np.nanstd(x)) > 1e-8
+            except Exception:
+                return False
+
+        rows = []
+        # Compute an elasticity value for each (model, topic)
+        for (m, t), g in gdf.groupby(["model", "topic"], sort=False):
+            n = len(g)
+            if n < 5:
+                continue
+            x = g[strength_col].to_numpy()
+            y = g["endorse_stance"].to_numpy()
+
+            # Prefer slope when sufficient coverage & variation
+            if n >= int(min_n_per_topic) and _has_variation(x, 3):
+                try:
+                    slope = float(np.polyfit(x, y, 1)[0])
+                    rows.append({"model": m, "topic": t, "elasticity": slope, "n": int(n)})
+                    continue
+                except Exception:
+                    pass
+
+            # Fallback: Spearman correlation on ranks
+            try:
+                rx = pd.Series(x).rank(method="average")
+                ry = pd.Series(y).rank(method="average")
+                if _has_variation(rx, 2) and _has_variation(ry, 2):
+                    r = float(np.corrcoef(rx, ry)[0, 1])
+                    rows.append({"model": m, "topic": t, "elasticity": r, "n": int(n)})
+            except Exception:
+                continue
+
+        elasticity_df = pd.DataFrame(rows)
+        if elasticity_df.empty:
+            return {"items": [], "summary": {}}
+
+        def weighted_std(x, w):
+            x, w = np.asarray(x, float), np.asarray(w, float)
+            mask = np.isfinite(x) & np.isfinite(w) & (w > 0)
+            x, w = x[mask], w[mask]
+            if len(x) == 0:
+                return np.nan
+            mu = float(np.average(x, weights=w))
+            return float(np.sqrt(np.average((x - mu) ** 2, weights=w)))
+
+        # Per-model: number of topics contributing and weighted std of elasticity by n
+        model_elasticity = (
+            elasticity_df.groupby("model")
+            .apply(lambda g: pd.Series({
+                "topics_used": g["topic"].nunique(),
+                "elasticity_var": weighted_std(g["elasticity"], g["n"]),
+            }))
+            .reset_index()
+        )
+
+        # Topic dispersion (wMAD) across topic means per model
+        topic_means = (
+            gdf.groupby(["model", "topic"])  # mean endorse per model-topic
+            ["endorse_stance"].mean().reset_index()
+        )
+
+        def weighted_mad(x, weights=None):
+            x = np.asarray(x, float)
+            if weights is None:
+                weights = np.ones_like(x)
+            else:
+                weights = np.asarray(weights, float)
+            mask = np.isfinite(x) & np.isfinite(weights) & (weights > 0)
+            x, weights = x[mask], weights[mask]
+            if len(x) == 0:
+                return np.nan
+            median_x = float(np.median(x))
+            mad = float(np.average(np.abs(x - median_x), weights=weights))
+            return mad
+
+        model_dispersion = (
+            topic_means.groupby("model")
+            .apply(lambda g: pd.Series({
+                "topic_count": int(len(g)),
+                "topic_dispersion_wMAD": weighted_mad(g["endorse_stance"]),
+            }))
+            .reset_index()
+        )
+        
+        # Mirror notebook: require sufficient topic coverage for dispersion as well
+        model_dispersion = model_dispersion.query("topic_count >= @min_topics").dropna()
+
+        # Merge and filter
+        df_out = (
+            model_elasticity.merge(
+                model_dispersion[["model", "topic_dispersion_wMAD"]], on="model", how="inner"
+            )
+            .dropna()
+        )
+        df_out = df_out.query("topics_used >= @min_topics")
+        if df_out.empty:
+            return {"items": [], "summary": {}}
+
+        # Compute medians for guideline lines
+        try:
+            x_med = float(np.median(df_out["topic_dispersion_wMAD"]))
+        except Exception:
+            x_med = None
+        try:
+            y_med = float(np.median(df_out["elasticity_var"]))
+        except Exception:
+            y_med = None
+
+        # Round for compact JSON and consistency
+        def _round(v):
+            try:
+                return None if v is None or (isinstance(v, float) and (np.isnan(v) or np.isinf(v))) else round(float(v), 6)
+            except Exception:
+                return None
+
+        items = []
+        for _, row in df_out.iterrows():
+            items.append({
+                "model": row["model"],
+                "topics_used": int(row["topics_used"]) if pd.notna(row["topics_used"]) else None,
+                "elasticity_var": _round(row["elasticity_var"]),
+                "topic_dispersion_wMAD": _round(row["topic_dispersion_wMAD"]),
+            })
+
+        return {"items": items, "summary": {"x_median": _round(x_med), "y_median": _round(y_med)}}
+
     def network_data(self, k: int = 6, random_state: int = 42):
         """Build a kNN+MST network from similarity/distance matrix with UMAP layout.
 
@@ -385,7 +556,7 @@ class FinalResultsLoader:
                 g.es['weight'] = weights
                 part = la.find_partition(g, la.RBConfigurationVertexPartition, weights='weight', resolution_parameter=1.0)
                 membership = part.membership
-            except Exception as e:
+            except Exception:
                 logging.getLogger(__name__).exception(f"Leiden failed")
         else:
             # Simple heuristic: assign all to one community
@@ -410,7 +581,7 @@ class FinalResultsLoader:
 
         sim_path = self.base_dir / "similarity_matrix.npy"
         names_path = self.base_dir / "model_names.json"
-        if not sim_path.exists() or not names_path.exists():
+        if not names_path.exists() or not sim_path.exists():
             return None
 
         try:
@@ -649,6 +820,19 @@ def api_final_network_png():
     if buf is None:
         return jsonify({"error": "Network image could not be generated."}), 500
     return send_file(buf, mimetype='image/png')
+
+@app.route('/api/final_results/stance_elasticity')
+def api_final_stance_elasticity():
+    """Return per-model stance elasticity and topic dispersion metrics suitable for dashboard charting."""
+    ldr = _get_final_loader()
+    try:
+        # Optional overrides via query params
+        min_n = request.args.get('min_n', default=8, type=int)
+        min_topics = request.args.get('min_topics', default=6, type=int)
+    except Exception:
+        min_n, min_topics = 8, 6
+    res = ldr.stance_elasticity_metrics(min_n_per_topic=min_n, min_topics=min_topics)
+    return jsonify({'run_path': str(ldr.base_dir), 'items': res.get('items', []), 'summary': res.get('summary', {})})
 
 if __name__ == '__main__':
     print("Starting LLM Judge Dashboard Server...")
