@@ -657,12 +657,17 @@ def dashboard():
 @app.route('/judge')
 def judge_dashboard():
     """Serve the judge-only dashboard HTML"""
-    return send_from_directory(str(BASE_DIR), 'llm_judge_dashboard.html')
+    return send_from_directory('.', 'llm_judge_dashboard.html')
 
 @app.route('/final')
 def final_results_dashboard():
-    """Serve the final results + prompt explorer dashboard HTML"""
-    return send_from_directory(str(BASE_DIR), 'final_results_dashboard.html')
+    """Serve the final results dashboard HTML."""
+    return send_from_directory('.', 'final_results_dashboard.html')
+
+@app.route('/prompts')
+def prompt_explorer():
+    """Serve the prompt explorer page."""
+    return send_from_directory('.', 'prompt_explorer.html')
 
 @app.route('/api/prompt_battery')
 def get_prompt_battery():
@@ -824,15 +829,62 @@ def api_final_network_png():
 @app.route('/api/final_results/stance_elasticity')
 def api_final_stance_elasticity():
     """Return per-model stance elasticity and topic dispersion metrics suitable for dashboard charting."""
-    ldr = _get_final_loader()
+    loader = _get_final_loader()
+    min_n = int(request.args.get('min_n', 8))
+    min_topics = int(request.args.get('min_topics', 6))
+    result = loader.stance_elasticity_metrics(min_n_per_topic=min_n, min_topics=min_topics)
+    return jsonify(result)
+
+@app.route('/api/responses_combined')
+def api_responses_combined():
+    """Return combined responses data with scores for prompt explorer."""
+    loader = _get_final_loader()
+    responses_path = loader.base_dir / "responses_combined.json"
+    scores_path = loader.base_dir / "scored_rows.csv"
+    
+    if not responses_path.exists():
+        return jsonify({"error": "responses_combined.json not found"}), 404
+    
     try:
-        # Optional overrides via query params
-        min_n = request.args.get('min_n', default=8, type=int)
-        min_topics = request.args.get('min_topics', default=6, type=int)
-    except Exception:
-        min_n, min_topics = 8, 6
-    res = ldr.stance_elasticity_metrics(min_n_per_topic=min_n, min_topics=min_topics)
-    return jsonify({'run_path': str(ldr.base_dir), 'items': res.get('items', []), 'summary': res.get('summary', {})})
+        # Load responses
+        with open(responses_path, 'r', encoding='utf-8') as f:
+            responses_data = json.load(f)
+        
+        # Load scores if available
+        scores_dict = {}
+        if scores_path.exists():
+            import pandas as pd
+            scores_df = pd.read_csv(scores_path)
+            # Create lookup dictionary: (model, prompt_id) -> scores
+            for _, row in scores_df.iterrows():
+                key = (row['model'], row['prompt_id'])
+                scores_dict[key] = {
+                    'endorse_stance': float(row['endorse_stance']) if pd.notna(row['endorse_stance']) else None,
+                    'challenge': float(row['challenge']) if pd.notna(row['challenge']) else None,
+                    'harm_validation': float(row['harm_validation']) if pd.notna(row['harm_validation']) else None,
+                    'devil_advocate': float(row['devil_advocate']) if pd.notna(row['devil_advocate']) else None,
+                    'flattery_density': float(row['flattery_density']) if pd.notna(row['flattery_density']) else None,
+                    'intens_density': float(row['intens_density']) if pd.notna(row['intens_density']) else None,
+                    'hedge_density': float(row['hedge_density']) if pd.notna(row['hedge_density']) else None,
+                    'refusal_markers': float(row['refusal_markers']) if pd.notna(row['refusal_markers']) else None,
+                    'safe_alt_markers': float(row['safe_alt_markers']) if pd.notna(row['safe_alt_markers']) else None,
+                    'evasion_markers': float(row['evasion_markers']) if pd.notna(row['evasion_markers']) else None,
+                    'caveat_in_open': float(row['caveat_in_open']) if pd.notna(row['caveat_in_open']) else None,
+                    'pred_label': str(row['pred_label']) if pd.notna(row['pred_label']) else None
+                }
+        
+        # Merge scores with responses
+        for response in responses_data:
+            key = (response['model'], response['prompt_id'])
+            if key in scores_dict:
+                response['scores'] = scores_dict[key]
+            else:
+                response['scores'] = None
+        
+        return jsonify(responses_data)
+    except Exception as e:
+        logging.getLogger(__name__).exception(f"Failed to load responses with scores")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     print("Starting LLM Judge Dashboard Server...")

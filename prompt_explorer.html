@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Explorer - LLM Sycophancy Analysis</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 50%, #415a77 100%); min-height: 100vh; color: #e0e1dd; line-height: 1.6; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .header { background: rgba(224, 225, 221, 0.95); backdrop-filter: blur(10px); border-radius: 16px; padding: 32px; margin-bottom: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(119, 141, 169, 0.3); }
+        .header h1 { color: #0d1b2a; margin-bottom: 8px; }
+        .header p { color: #415a77; }
+        .controls { background: rgba(224, 225, 221, 0.95); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px; margin-bottom: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(119, 141, 169, 0.3); }
+        .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: end; }
+        .control-group { display: flex; flex-direction: column; }
+        .control-group label { font-weight: 500; margin-bottom: 4px; color: #0d1b2a; font-size: 0.9rem; }
+        .control-group select, .control-group input { padding: 10px 14px; border: 2px solid #778da9; border-radius: 8px; font-size: 0.9rem; transition: all 0.2s; background: white; color: #0d1b2a; }
+        .control-group select:focus, .control-group input:focus { outline: none; border-color: #415a77; box-shadow: 0 0 0 3px rgba(65, 90, 119, 0.2); }
+        .control-group button { padding: 12px 20px; background: linear-gradient(135deg, #1b263b 0%, #415a77 100%); color: #e0e1dd; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; box-shadow: 0 4px 12px rgba(13, 27, 42, 0.4); }
+        .control-group button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(13, 27, 42, 0.6); }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .stat-card { background: rgba(224, 225, 221, 0.95); backdrop-filter: blur(10px); padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.2); border: 1px solid rgba(119, 141, 169, 0.3); transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-value { font-size: 1.8rem; font-weight: bold; background: linear-gradient(135deg, #0d1b2a 0%, #415a77 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .stat-label { font-size: 0.8rem; color: #415a77; margin-top: 4px; }
+        .prompt-list { display: grid; gap: 16px; }
+        .prompt-item { background: rgba(224, 225, 221, 0.95); backdrop-filter: blur(10px); border-radius: 16px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 1px solid rgba(119, 141, 169, 0.3); transition: all 0.3s; }
+        .prompt-item:hover { transform: translateY(-4px); box-shadow: 0 12px 48px rgba(0,0,0,0.4); }
+        .prompt-header { padding: 20px 24px; background: linear-gradient(135deg, #778da9 0%, #415a77 100%); border-bottom: 1px solid rgba(119, 141, 169, 0.5); cursor: pointer; user-select: none; transition: all 0.2s; }
+        .prompt-header:hover { background: linear-gradient(135deg, #415a77 0%, #1b263b 100%); }
+        .prompt-header strong { color: #e0e1dd; }
+        .expand-icon { color: #e0e1dd; }
+        .prompt-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-top: 8px; font-size: 0.85rem; }
+        .meta-item { display: flex; flex-direction: column; }
+        .meta-label { color: #e0e1dd; font-weight: 500; }
+        .meta-value { color: #e0e1dd; font-weight: 700; }
+        .prompt-text { background: linear-gradient(135deg, #e0e1dd 0%, #778da9 100%); padding: 20px 24px; border-left: 4px solid #415a77; margin: 20px 24px; border-radius: 12px; font-style: italic; box-shadow: 0 2px 8px rgba(0,0,0,0.2); color: #0d1b2a; }
+        .responses-container { padding: 0 20px 20px; display: none; }
+        .response-item { margin-bottom: 20px; border: 2px solid rgba(119, 141, 169, 0.5); border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.2); transition: all 0.2s; }
+        .response-item:hover { border-color: rgba(65, 90, 119, 0.7); box-shadow: 0 6px 24px rgba(0,0,0,0.3); }
+        .response-header { padding: 16px 20px; background: linear-gradient(135deg, #778da9 0%, #415a77 100%); border-bottom: 1px solid rgba(119, 141, 169, 0.5); display: flex; justify-content: space-between; align-items: center; }
+        .model-name { font-weight: 700; color: #e0e1dd; font-size: 1.1rem; }
+        .response-meta { font-size: 0.8rem; color: #e0e1dd; }
+        .response-text { padding: 20px; background: white; white-space: pre-wrap; line-height: 1.7; font-size: 0.95rem; color: #0d1b2a; }
+        .scores-section { padding: 16px 20px; background: linear-gradient(135deg, #e0e1dd 0%, #778da9 100%); border-top: 1px solid rgba(119, 141, 169, 0.5); }
+        .scores-header { font-weight: 700; color: #0d1b2a; margin-bottom: 12px; font-size: 1rem; }
+        .scores-badge { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+        .scores-badge::before { content: 'Label'; font-size: 0.75rem; color: #0d1b2a; font-weight: 600; }
+        .scores-badge span { display: inline-block; padding: 6px 14px; border-radius: 9999px; border: 2px solid transparent; font-size: 0.85rem; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: all 0.2s; }
+        .scores-badge span:hover { transform: scale(1.05); }
+        /* Label color variants */
+        .scores-badge span.label-default { background: linear-gradient(135deg, #1b263b 0%, #415a77 100%); color: #e0e1dd; border-color: #778da9; }
+        .scores-badge span.label-challenge { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border-color: #34d399; }
+        .scores-badge span.label-endorse { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border-color: #f87171; }
+        .scores-badge span.label-refusal { background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%); color: white; border-color: #9ca3af; }
+        .scores-badge span.label-safe_alt { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border-color: #60a5fa; }
+        .scores-badge span.label-evasion { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; border-color: #fbbf24; }
+        .scores-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+        .score-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(224, 225, 221, 0.9); border-radius: 8px; border: 2px solid rgba(119, 141, 169, 0.5); transition: all 0.2s; }
+        .score-item:hover { background: rgba(224, 225, 221, 1); border-color: rgba(65, 90, 119, 0.7); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        .score-label { font-size: 0.8rem; color: #0d1b2a; font-weight: 600; }
+        .score-value { font-size: 0.85rem; color: #0d1b2a; font-weight: 700; }
+        .no-scores { padding: 16px 20px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border-top: 1px solid rgba(119, 141, 169, 0.5); color: white; font-style: italic; text-align: center; border-radius: 8px; }
+        .expanded .responses-container { display: block; }
+        .expand-icon { transition: transform 0.3s; font-size: 1.2rem; }
+        .expanded .expand-icon { transform: rotate(90deg); }
+        .loading { text-align: center; padding: 40px; color: rgba(224, 225, 221, 0.8); }
+        .no-data { text-align: center; padding: 40px; color: rgba(224, 225, 221, 0.8); }
+        .pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 32px; }
+        .pagination button { padding: 10px 16px; border: 2px solid rgba(224, 225, 221, 0.3); background: rgba(224, 225, 221, 0.9); backdrop-filter: blur(10px); border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; color: #0d1b2a; }
+        .pagination button:hover { background: rgba(224, 225, 221, 1); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .pagination button.active { background: linear-gradient(135deg, #1b263b 0%, #415a77 100%); color: #e0e1dd; border-color: transparent; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination span { color: rgba(224, 225, 221, 0.9); font-weight: 600; padding: 10px 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="topnav" style="display:flex; justify-content:flex-start; align-items:center; gap:16px; margin-bottom:16px; background: rgba(224, 225, 221, 0.9); backdrop-filter: blur(10px); padding: 12px 20px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);">
+            <a href="/final" style="text-decoration:none; color:#0d1b2a; font-weight:700; padding: 8px 16px; border-radius: 8px; transition: all 0.2s;">Final Results</a>
+            <span style="color:#778da9; font-weight: 300;">|</span>
+            <a href="/judge" style="text-decoration:none; color:#0d1b2a; font-weight:700; padding: 8px 16px; border-radius: 8px; transition: all 0.2s;">Judge Dashboard</a>
+            <span style="color:#778da9; font-weight: 300;">|</span>
+            <a href="/prompts" style="text-decoration:none; color:#0d1b2a; font-weight:700; padding: 8px 16px; border-radius: 8px; transition: all 0.2s; background: rgba(65, 90, 119, 0.2);">Prompt Explorer</a>
+        </div>
+        <div class="header">
+            <h1>🔍 Prompt Explorer</h1>
+            <p>Explore prompts and model responses from the LLM Sycophancy Analysis dataset. Click on any prompt to view all model responses.</p>
+        </div>
+
+        <div class="controls">
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label for="topicFilter">Topic</label>
+                    <select id="topicFilter">
+                        <option value="">All Topics</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="modelFilter">Model</label>
+                    <select id="modelFilter">
+                        <option value="">All Models</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="stanceFilter">Stance</label>
+                    <select id="stanceFilter">
+                        <option value="">All Stances</option>
+                        <option value="1">Positive (1)</option>
+                        <option value="-1">Negative (-1)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="strengthFilter">Strength</label>
+                    <select id="strengthFilter">
+                        <option value="">All Strengths</option>
+                        <option value="0.2">Weak (0.2)</option>
+                        <option value="0.5">Medium (0.5)</option>
+                        <option value="0.8">Strong (0.8)</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="searchText">Search Text</label>
+                    <input type="text" id="searchText" placeholder="Search in prompts or responses...">
+                </div>
+                <div class="control-group">
+                    <button id="applyFilters">Apply Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalPrompts">-</div>
+                <div class="stat-label">Total Prompts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalResponses">-</div>
+                <div class="stat-label">Total Responses</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="uniqueModels">-</div>
+                <div class="stat-label">Unique Models</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="filteredCount">-</div>
+                <div class="stat-label">Filtered Results</div>
+            </div>
+        </div>
+
+        <div id="promptList" class="prompt-list">
+            <div class="loading">Loading prompts and responses...</div>
+        </div>
+
+        <div class="pagination" id="pagination" style="display: none;">
+            <button id="prevPage">← Previous</button>
+            <span id="pageInfo">Page 1 of 1</span>
+            <button id="nextPage">Next →</button>
+        </div>
+    </div>
+
+    <script>
+        class PromptExplorer {
+            constructor() {
+                this.allData = [];
+                this.filteredData = [];
+                this.currentPage = 1;
+                this.itemsPerPage = 10;
+                this.init();
+            }
+
+            async init() {
+                await this.loadData();
+                this.setupEventListeners();
+                this.populateFilters();
+                this.applyFilters();
+            }
+
+            labelClass(label) {
+                if (!label) return 'default';
+                const t = String(label).toLowerCase();
+                if (t.includes('challenge')) return 'challenge';
+                if (t.includes('endorse')) return 'endorse';
+                if (t.includes('refus')) return 'refusal';
+                if (t.includes('safe')) return 'safe_alt';
+                if (t.includes('evad') || t.includes('evas')) return 'evasion';
+                return 'default';
+            }
+
+            async loadData() {
+                try {
+                    const response = await fetch('/api/responses_combined');
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    this.allData = await response.json();
+                    console.log(`Loaded ${this.allData.length} responses`);
+                } catch (error) {
+                    console.error('Failed to load data:', error);
+                    document.getElementById('promptList').innerHTML = 
+                        '<div class="no-data">Failed to load data. Please check the server connection.</div>';
+                }
+            }
+
+            populateFilters() {
+                const topics = [...new Set(this.allData.map(d => d.topic))].sort();
+                const models = [...new Set(this.allData.map(d => d.model))].sort();
+
+                const topicSelect = document.getElementById('topicFilter');
+                const modelSelect = document.getElementById('modelFilter');
+
+                topics.forEach(topic => {
+                    const option = document.createElement('option');
+                    option.value = topic;
+                    option.textContent = topic.charAt(0).toUpperCase() + topic.slice(1);
+                    topicSelect.appendChild(option);
+                });
+
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    modelSelect.appendChild(option);
+                });
+            }
+
+            setupEventListeners() {
+                document.getElementById('applyFilters').addEventListener('click', () => this.applyFilters());
+                document.getElementById('searchText').addEventListener('keyup', (e) => {
+                    if (e.key === 'Enter') this.applyFilters();
+                });
+                document.getElementById('prevPage').addEventListener('click', () => this.changePage(-1));
+                document.getElementById('nextPage').addEventListener('click', () => this.changePage(1));
+            }
+
+            applyFilters() {
+                const topic = document.getElementById('topicFilter').value;
+                const model = document.getElementById('modelFilter').value;
+                const stance = document.getElementById('stanceFilter').value;
+                const strength = document.getElementById('strengthFilter').value;
+                const searchText = document.getElementById('searchText').value.toLowerCase();
+
+                this.filteredData = this.allData.filter(item => {
+                    if (topic && item.topic !== topic) return false;
+                    if (model && item.model !== model) return false;
+                    if (stance && item.stance.toString() !== stance) return false;
+                    if (strength && item.strength.toString() !== strength) return false;
+                    if (searchText && !item.prompt_text.toLowerCase().includes(searchText) && 
+                        !item.response.toLowerCase().includes(searchText)) return false;
+                    return true;
+                });
+
+                this.updateStats();
+                this.currentPage = 1;
+                this.renderPrompts();
+            }
+
+            updateStats() {
+                const uniquePrompts = new Set(this.allData.map(d => d.prompt_id)).size;
+                const uniqueModels = new Set(this.allData.map(d => d.model)).size;
+                
+                document.getElementById('totalPrompts').textContent = uniquePrompts;
+                document.getElementById('totalResponses').textContent = this.allData.length;
+                document.getElementById('uniqueModels').textContent = uniqueModels;
+                document.getElementById('filteredCount').textContent = this.filteredData.length;
+            }
+
+            renderPrompts() {
+                // Group by prompt_id
+                const promptGroups = {};
+                this.filteredData.forEach(item => {
+                    if (!promptGroups[item.prompt_id]) {
+                        promptGroups[item.prompt_id] = {
+                            prompt_id: item.prompt_id,
+                            prompt_text: item.prompt_text,
+                            topic: item.topic,
+                            persona: item.persona,
+                            stance: item.stance,
+                            strength: item.strength,
+                            is_harmful: item.is_harmful,
+                            responses: []
+                        };
+                    }
+                    promptGroups[item.prompt_id].responses.push(item);
+                });
+
+                const prompts = Object.values(promptGroups);
+                const totalPages = Math.ceil(prompts.length / this.itemsPerPage);
+                const startIdx = (this.currentPage - 1) * this.itemsPerPage;
+                const endIdx = startIdx + this.itemsPerPage;
+                const currentPrompts = prompts.slice(startIdx, endIdx);
+
+                const container = document.getElementById('promptList');
+                
+                if (currentPrompts.length === 0) {
+                    container.innerHTML = '<div class="no-data">No prompts match the current filters.</div>';
+                    document.getElementById('pagination').style.display = 'none';
+                    return;
+                }
+
+                container.innerHTML = currentPrompts.map(prompt => `
+                    <div class="prompt-item">
+                        <div class="prompt-header" onclick="this.closest('.prompt-item').classList.toggle('expanded')">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="expand-icon">▶</span>
+                                    <strong>Prompt ${prompt.prompt_id}</strong>
+                                    <span style="background: #e2e8f0; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem;">${prompt.responses.length} responses</span>
+                                </div>
+                                <div class="prompt-meta">
+                                    <div class="meta-item">
+                                        <span class="meta-label">Topic</span>
+                                        <span class="meta-value">${prompt.topic}</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Persona</span>
+                                        <span class="meta-value">${prompt.persona}</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Stance</span>
+                                        <span class="meta-value">${prompt.stance > 0 ? 'Positive' : 'Negative'} (${prompt.stance})</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Strength</span>
+                                        <span class="meta-value">${prompt.strength}</span>
+                                    </div>
+                                    <div class="meta-item">
+                                        <span class="meta-label">Harmful</span>
+                                        <span class="meta-value">${prompt.is_harmful ? 'Yes' : 'No'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="prompt-text">"${prompt.prompt_text}"</div>
+                        <div class="responses-container">
+                            ${prompt.responses.map(response => `
+                                <div class="response-item">
+                                    <div class="response-header">
+                                        <span class="model-name">${response.model}</span>
+                                        <span class="response-meta">
+                                            ${response.source_run ? `Run: ${response.source_run}` : ''}
+                                            ${response.total_tokens ? `| Tokens: ${response.total_tokens}` : ''}
+                                        </span>
+                                    </div>
+                                    <div class="response-text">${response.response}</div>
+                                    ${response.scores ? `
+                                        <div class="scores-section">
+                                            <div class="scores-header">📊 LLM Judge Scores</div>
+                                            <div class="scores-badge"><span class="label-${this.labelClass(response.scores.pred_label)}">${response.scores.pred_label ? response.scores.pred_label : 'N/A'}</span></div>
+                                            <div class="scores-grid">
+                                                <div class="score-item">
+                                                    <span class="score-label">Endorse Stance</span>
+                                                    <span class="score-value">${response.scores.endorse_stance !== null ? response.scores.endorse_stance.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Challenge</span>
+                                                    <span class="score-value">${response.scores.challenge !== null ? response.scores.challenge.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Harm Validation</span>
+                                                    <span class="score-value">${response.scores.harm_validation !== null ? response.scores.harm_validation.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Devil's Advocate</span>
+                                                    <span class="score-value">${response.scores.devil_advocate !== null ? response.scores.devil_advocate.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Flattery Density</span>
+                                                    <span class="score-value">${response.scores.flattery_density !== null ? response.scores.flattery_density.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Intensity Density</span>
+                                                    <span class="score-value">${response.scores.intens_density !== null ? response.scores.intens_density.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Hedge Density</span>
+                                                    <span class="score-value">${response.scores.hedge_density !== null ? response.scores.hedge_density.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Refusal Markers</span>
+                                                    <span class="score-value">${response.scores.refusal_markers !== null ? response.scores.refusal_markers.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Safe Alt Markers</span>
+                                                    <span class="score-value">${response.scores.safe_alt_markers !== null ? response.scores.safe_alt_markers.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Evasion Markers</span>
+                                                    <span class="score-value">${response.scores.evasion_markers !== null ? response.scores.evasion_markers.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                                <div class="score-item">
+                                                    <span class="score-label">Caveat in Opening</span>
+                                                    <span class="score-value">${response.scores.caveat_in_open !== null ? response.scores.caveat_in_open.toFixed(2) : 'N/A'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ` : '<div class="no-scores">No scoring data available for this response.</div>'}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('');
+
+                // Update pagination
+                document.getElementById('pageInfo').textContent = `Page ${this.currentPage} of ${totalPages}`;
+                document.getElementById('prevPage').disabled = this.currentPage === 1;
+                document.getElementById('nextPage').disabled = this.currentPage === totalPages;
+                document.getElementById('pagination').style.display = totalPages > 1 ? 'flex' : 'none';
+            }
+
+            changePage(delta) {
+                this.currentPage += delta;
+                this.renderPrompts();
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new PromptExplorer();
+        });
+    </script>
+</body>
+</html>
