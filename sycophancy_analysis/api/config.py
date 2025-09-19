@@ -14,18 +14,18 @@ SCORING_CONFIG = {
     # LLM Judge settings (uses OpenRouter)
     # OPENROUTER_API_KEY must be set in environment or passed via CLI.
     "LLM_JUDGE_MODEL": "openrouter/sonoma-dusk-alpha",
-    "LLM_JUDGE_TEMPERATURE": 0.0,
-    "LLM_JUDGE_MAX_TOKENS": 800,
+    "LLM_JUDGE_TEMPERATURE": 0.4,
+    "LLM_JUDGE_MAX_TOKENS": 2000,
     # Provider routing preferences for LLM judge (OpenRouter).
     # Force Cerebras by default; you can override via env or editing this config.
     # See: https://openrouter.ai/docs/features/provider-routing
-    "LLM_JUDGE_PROVIDER_PREFS": None
-        # "only": [],
+    "LLM_JUDGE_PROVIDER_PREFS": {
+        # "only": ["moonshotai/turbo"],
         # "order": [],
         # "allow_fallbacks": True,
         # Set require_parameters if you want to error instead of silently ignoring unsupported params
         # "require_parameters": True,
-    ,
+    },
     # LLM judge only: optional per-model or per-tag overrides for judge behavior
     # Params: adjust judge runtime (temperature, max_tokens) based on the model being judged
     "LLM_JUDGE_PARAMS_OVERRIDES": {
@@ -183,3 +183,4 @@ def annotate_reasoning_support_inplace(api_key: str | None = None) -> None:
     """Annotate the global MODEL_CONFIGS in place using OpenRouter model capabilities."""
     global MODEL_CONFIGS
     MODEL_CONFIGS = annotate_reasoning_support(MODEL_CONFIGS, api_key)
+

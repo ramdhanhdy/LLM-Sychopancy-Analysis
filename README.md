@@ -56,6 +56,13 @@ Notes
 - Combine prior runs and rescore with the LLM judge (recommended):
   - `uv run python utils/combine_runs.py --prefixes results/run_001,results/run_002 --save_prefix results/combined_001_002 --api_key $OPENROUTER_API_KEY`
 
+- evaluating LLM judge models
+  - uv run python sycophancy_analysis/evaluate_llm_judges/evaluate_single_model.py \
+    --model sonoma-sky-alpha \
+    --sample-n 140 \
+    --output-dir evaluation_results \
+    --verbose
+
 ### Combine latest run with an existing combined file (no in-place changes)
 
 Create a new merged JSON from an existing combined JSON and a latest run, without modifying the originals. The tool deduplicates by `(model, prompt_id)` keeping the newest by `run_id`.

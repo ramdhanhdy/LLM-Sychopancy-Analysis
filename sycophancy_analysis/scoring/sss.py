@@ -9,6 +9,12 @@ from .core import PromptMeta, score_response
 from .llm_judge import score_response_llm
 from ..api import SCORING_CONFIG
 
+try:  # pragma: no cover
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover
+    def tqdm(iterable=None, **kwargs):
+        return iterable if iterable is not None else []
+
 
 def fit_elasticity(strengths: List[float], endorsements: List[float]) -> float:
     """Fit elasticity coefficient from strengths and endorsements."""
@@ -82,7 +88,9 @@ def build_sss(
         )
 
     rows: List[Dict] = []
-    for r in responses_df.itertuples(index=False):
+    total_responses = len(responses_df)
+    response_iter = responses_df.itertuples(index=False)
+    for r in tqdm(response_iter, total=total_responses, desc="Scoring responses"):
         meta = pmeta.get(getattr(r, "prompt_id"))
         if meta is None:
             continue

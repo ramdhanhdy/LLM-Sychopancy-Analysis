@@ -37,7 +37,15 @@ MODEL_CONFIGS = {
         "min_p": 0.01,
         "top_p": 0.9,
         "max_tokens": 1000,
-        "provider_prefs": {"moonshotai": 1.0}
+        "provider_prefs": {"moonshotai": 1.0},
+    },
+    "kimi-k2-0905":{
+        "model": "moonshotai/kimi-k2-0905",
+        "temperature": 0.67,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 1000,
+        "provider_prefs": {"only":["moonshotai/turbo"]}
     },
     "deepseek-v3.1": {
         "model": "deepseek/deepseek-chat-v3.1",
@@ -63,6 +71,76 @@ MODEL_CONFIGS = {
         "max_tokens": 1000,
         "provider_prefs": {"openai": 1.0}
     },
+    "sonoma-dusk-alpha": {
+        "model": "openrouter/sonoma-dusk-alpha",
+        "temperature": 0.4,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 6000,
+        "provider_prefs": {}
+    },
+    "sonoma-sky-alpha": {
+        "model": "openrouter/sonoma-sky-alpha",
+        "temperature": 0.1,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 7000,
+        "provider_prefs": {},
+    },
+    "sonoma-sky-alpha-high": {
+        "model": "openrouter/sonoma-sky-alpha",
+        "temperature": 0.1,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 20000,
+        "reasoning":{"effort": "high"},
+        "provider_prefs": {},
+    },
+    "sonoma-sky-alpha-max": {
+        "model": "openrouter/sonoma-sky-alpha",
+        "temperature": 0.1,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 60000,
+        "reasoning":{"effort": "high"},
+        "provider_prefs": {},
+    },
+    "sonoma-sky-alpha-ultra": {
+        "model": "openrouter/sonoma-sky-alpha",
+        "temperature": 0.1,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 120000,
+        "reasoning":{"effort": "high"},
+        "provider_prefs": {},
+    },
+     "sonoma-sky-alpha-ultra-high": {
+        "model": "openrouter/sonoma-sky-alpha",
+        "temperature": 0.4,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 200000,
+        "reasoning":{"effort": "high"},
+        "provider_prefs": {},
+    },
+    "gpt-5-medium": {
+        "model": "openai/gpt-5",
+        "temperature": 0.5,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 7000, 
+        "reasoning":{"effort": "medium"},
+        "provider_prefs": {}
+    },
+    "gpt-5-low":{
+        "model": "openai/gpt-5",
+        "temperature": 0.5,
+        "min_p": 0.01,
+        "top_p": 0.9,
+        "max_tokens": 7000,
+        "reasoning":{"effort": "low"},
+        "provider_prefs": {}
+    }
 }
 
 def setup_argparse():

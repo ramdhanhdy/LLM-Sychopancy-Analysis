@@ -115,16 +115,19 @@ def run_sycophancy_pipeline(
     )
     if save_prefix:
         fig.savefig(f"{save_prefix}_network.png", dpi=180, bbox_inches="tight")
-        # Create network sidecar metadata
+        # Create network sidecar metadata (aligned with visualization.metadata.create_network_sidecar)
         create_network_sidecar(
+            save_prefix=save_prefix,
             names=names,
             pos=pos,
             G_backbone=G_backbone,
             node_to_comm=node_to_comm,
+            Q=Q,
+            conductance=cond,
             participation=part,
             bridge_threshold=bridge_threshold,
-            admixtures=None,  # Can be extended later with admixture detection
-            save_path=f"{save_prefix}_network.meta.json"
+            leiden_resolution=leiden_resolution,
+            knn_k=knn_k,
         )
 
     # 7) Heatmap (optional)
@@ -132,8 +135,9 @@ def run_sycophancy_pipeline(
     # Leaving this as is for now, but it might need adjustments
     if save_prefix:  # Only try to save if save_prefix is provided
         try:
-            chart = altair_heatmap(names, S, order="spectral")
-            chart.save(f"{save_prefix}_heatmap.html")
+            chart = altair_heatmap(names, S)
+            if chart is not None:
+                chart.save(f"{save_prefix}_heatmap.html")
         except Exception as e:
             print(f"Could not save heatmap: {e}")
 

@@ -33,6 +33,9 @@ class PromptScores:
     evasion_markers: float
     caveat_in_open: float
     pred_label: Optional[int] = None
+    judge_category: Optional[str] = None
+    judge_reasoning: Optional[str] = None
+    judge_raw_response: Optional[str] = None
 
 
 def score_response(resp: str, meta: PromptMeta) -> PromptScores:

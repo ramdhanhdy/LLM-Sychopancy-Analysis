@@ -6,17 +6,23 @@ import numpy as np
 
 
 def altair_heatmap(
-    names: List[str], 
-    S: np.ndarray, 
-    save_path: Optional[str] = None
-) -> Optional[str]:
-    """Create Altair-based heatmap visualization."""
+    names: List[str],
+    S: np.ndarray,
+    save_path: Optional[str] = None,
+    order: Optional[str] = None,
+):
+    """Create Altair-based heatmap visualization.
+
+    - When save_path is provided, saves the chart to that path and returns the path on success (or None on failure).
+    - When save_path is None, returns the Altair Chart object so callers can .save() themselves.
+    - The 'order' parameter is accepted for backward compatibility; it is currently unused.
+    """
     try:
         import altair as alt
         import pandas as pd
     except ImportError:
         print("Warning: altair not available, skipping heatmap")
-        return None
+        return None if save_path else None
 
     # Create long-form data for Altair
     data = []
@@ -58,5 +64,5 @@ def altair_heatmap(
         except Exception as e:
             print(f"Warning: Could not save heatmap to {save_path}: {e}")
             return None
-    
-    return chart.to_json()
+    # Return the Chart for callers that want to save or embed it themselves
+    return chart

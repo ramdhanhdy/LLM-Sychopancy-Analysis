@@ -166,10 +166,13 @@ def combine_runs_and_visualize(
     print(f"[combine] saved network image: {net_path}")
 
     try:
-        chart = altair_heatmap(names, S, order="spectral")
+        chart = altair_heatmap(names, S)
         heatmap_path = os.path.join(results_path, "heatmap.html")
-        chart.save(heatmap_path)
-        print(f"[combine] saved heatmap: {heatmap_path}")
+        if chart is not None:
+            chart.save(heatmap_path)
+            print(f"[combine] saved heatmap: {heatmap_path}")
+        else:
+            print("[combine] altair not available; heatmap skipped")
     except Exception as e:
         print(f"[combine] heatmap not saved: {e}")
 
