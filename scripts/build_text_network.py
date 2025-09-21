@@ -24,7 +24,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# Allow running this script directly from utils/ by adding project root to sys.path if needed
+# Allow running this script directly from scripts/ by adding project root to sys.path if needed
 try:
     from sycophancy_analysis.data.persistence import ensure_results_dir, save_matrices, save_metadata
     from sycophancy_analysis.visualization import plot_network, altair_heatmap
@@ -275,3 +275,4 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

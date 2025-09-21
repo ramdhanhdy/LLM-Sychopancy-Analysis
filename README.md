@@ -54,7 +54,7 @@ Notes
   - `--exclude_names "Gpt 5"`
 
 - Combine prior runs and rescore with the LLM judge (recommended):
-  - `uv run python utils/combine_runs.py --prefixes results/run_001,results/run_002 --save_prefix results/combined_001_002 --api_key $OPENROUTER_API_KEY`
+  - `uv run python scripts/combine_runs.py --prefixes results/run_001,results/run_002 --save_prefix results/combined_001_002 --api_key $OPENROUTER_API_KEY`
 
 - evaluating LLM judge models
   - uv run python sycophancy_analysis/evaluate_llm_judges/evaluate_single_model.py \
@@ -63,14 +63,14 @@ Notes
     --output-dir evaluation_results \
     --verbose
 
-### Combine latest run with an existing combined file (no in-place changes)
+### Combine latest run with an existing combined file
 
 Create a new merged JSON from an existing combined JSON and a latest run, without modifying the originals. The tool deduplicates by `(model, prompt_id)` keeping the newest by `run_id`.
 
 - Windows (PowerShell):
 
 ```
-uv run python utils/combine_responses.py `
+uv run python scripts/combine_responses.py `
   "results/combined_run_0c_1_1b/responses_combined.json" `
   "results/run_2b/responses/run_20250912_190809/responses.json" `
   --output "results/combined_run_0c_1_1b_2b/responses_combined.json" `
@@ -86,12 +86,12 @@ Notes:
 
 ### Build a text-based model network from RAW responses
 
-This creates a new model-level network using TF‑IDF cosine similarity over the raw response text (independent of SSS). It does not affect the existing stylometry-based chart.
+This creates a new model-level network using TF‑IDF cosine similarity over the raw response text (independent of SSS). This is different from the stylometric network, which uses SSS vectors.
 
 - Windows (PowerShell):
 
 ```
-uv run python utils/build_text_network.py `
+uv run python scripts/build_text_network.py `
   "results/combined_run_0c_1_1b_2b/responses_combined.json" `
   --save_prefix "results/textnet_0c_1_1b_2b" `
   --knn_k 8 `
@@ -135,7 +135,7 @@ Using `--save_prefix results/run_001` produces:
   - `scored_rows.csv` — Per-response LLM-judge outputs (including `pred_label`).
   - `metadata.json` — Comprehensive run metadata (models, scoring config, graph metrics, prompts snapshot).
 
-Combine runs (`utils/combine_runs.py`) writes combined results under the chosen prefix directory and also saves a `network.png`, `heatmap.html`, and `sycophancy_scores.csv` in that folder.
+Combine runs (scripts/combine_runs.py) writes combined results under the chosen prefix directory and also saves a `network.png`, `heatmap.html`, and `sycophancy_scores.csv` in that folder.
 
 ## Configuration
 
@@ -172,7 +172,7 @@ For metric definitions, see `docs/sycophancy_index_metrics.md`. For a deeper div
   - `scoring/` — heuristics + LLM judge scoring, SSS, sycophancy index helpers.
   - `visualization/` — network, heatmap, metrics, sidecar metadata, helpers.
   - `pipeline.py` — orchestrates prompts + collection + SSS + matrices + viz + SI table.
-- `utils/` — utilities including `combine_runs.py` and helpers for merging/rescoring.
+- `scripts/` — utilities including `combine_runs.py` and helpers for merging/rescoring.
 - `dataset/` — prompt battery and example inputs (`--export_prompts` can populate).
 - `results/` — generated artifacts (responses, CSV, vectors, matrices, metadata, plots).
 - `docs/`, `notebooks/` — reference and exploration.
@@ -193,3 +193,6 @@ For metric definitions, see `docs/sycophancy_index_metrics.md`. For a deeper div
 ---
 
 Security: Never commit API keys. Use `.env` or CI secrets and pass `--api_key` explicitly when needed.
+
+
+

@@ -6,7 +6,7 @@ Score combined responses and compute analysis artifacts:
 - Stance-elasticity curve points and linear fits per model (regular vs devil)
 
 Inputs
-- Combined responses produced by utils/combine_responses.py (JSON/JSONL/CSV)
+- Combined responses produced by scripts/combine_responses.py (JSON/JSONL/CSV)
   Must contain: model, prompt_id, response, and prompt metadata columns attached by the combiner:
     text, topic, persona, stance, strength, is_harmful, ask_devil
 
@@ -178,7 +178,7 @@ def _extract_existing_scores(df: pd.DataFrame) -> Optional[pd.DataFrame]:
         print("[_extract_existing_scores] Scores already present in combined data")
         return df
     
-    # Get the project root directory (parent of utils/)
+    # Get the project root directory (parent of scripts/)
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
     results_dir = project_root / "results"
@@ -352,3 +352,4 @@ def main(argv: Optional[List[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
+

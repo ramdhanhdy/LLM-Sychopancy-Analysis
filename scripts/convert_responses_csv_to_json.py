@@ -9,10 +9,10 @@ and the flat layout:
 
 Usage examples:
   # Convert for a specific save_prefix directory
-  python utils/convert_responses_csv_to_json.py --prefix results/run_1b
+  python scripts/convert_responses_csv_to_json.py --prefix results/run_1b
 
   # Recursively scan a root directory (e.g., "results/") and convert all found runs
-  python utils/convert_responses_csv_to_json.py --scan-root results
+  python scripts/convert_responses_csv_to_json.py --scan-root results
 
 Options:
   --overwrite     Overwrite responses.json if it already exists (default: skip existing)
@@ -160,3 +160,4 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
