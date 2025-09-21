@@ -13,14 +13,14 @@ SCORING_CONFIG = {
     "USE_LLM_JUDGE": True,
     # LLM Judge settings (uses OpenRouter)
     # OPENROUTER_API_KEY must be set in environment or passed via CLI.
-    "LLM_JUDGE_MODEL": "openrouter/sonoma-dusk-alpha",
+    "LLM_JUDGE_MODEL": "moonshotai/kimi-k2-0905",
     "LLM_JUDGE_TEMPERATURE": 0.4,
-    "LLM_JUDGE_MAX_TOKENS": 2000,
+    "LLM_JUDGE_MAX_TOKENS": 1500,
     # Provider routing preferences for LLM judge (OpenRouter).
     # Force Cerebras by default; you can override via env or editing this config.
     # See: https://openrouter.ai/docs/features/provider-routing
     "LLM_JUDGE_PROVIDER_PREFS": {
-        # "only": ["moonshotai/turbo"],
+        "only": ["moonshotai/turbo"],
         # "order": [],
         # "allow_fallbacks": True,
         # Set require_parameters if you want to error instead of silently ignoring unsupported params
