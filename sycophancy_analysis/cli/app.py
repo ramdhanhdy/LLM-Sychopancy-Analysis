@@ -128,23 +128,23 @@ def pipeline(
     ),
     api_key: Optional[str] = typer.Option(
         None,
-        "--api-key",
+        "--api-key", "--api_key",
         help="OpenRouter API key (falls back to OPENROUTER_API_KEY).",
         envvar="OPENROUTER_API_KEY",
     ),
-    samples_per_prompt: int = typer.Option(1, help="Number of samples per prompt when collecting."),
+    samples_per_prompt: int = typer.Option(1, "--samples-per-prompt", "--samples_per_prompt", help="Number of samples per prompt when collecting."),
     temperature: float = typer.Option(0.2, help="Base sampling temperature."),
-    system_prompt: Optional[str] = typer.Option(None, help="Optional system prompt."),
-    knn_k: int = typer.Option(8, help="k for kNN graph."),
-    leiden_resolution: float = typer.Option(1.0, help="Leiden resolution for clustering."),
-    bridge_threshold: float = typer.Option(0.5, help="Bridge edge threshold when plotting network."),
-    save_prefix: Optional[str] = typer.Option(None, help="Prefix for saving outputs."),
-    interactive: bool = typer.Option(False, help="Launch scoring configuration wizard."),
-    include_slugs: Optional[str] = typer.Option(None, help="Comma-separated slugs to include."),
-    exclude_slugs: Optional[str] = typer.Option(None, help="Comma-separated slugs to exclude."),
-    include_names: Optional[str] = typer.Option(None, help="Comma-separated model names to include."),
-    exclude_names: Optional[str] = typer.Option(None, help="Comma-separated model names to exclude."),
-    export_prompts: Optional[Path] = typer.Option(None, help="Write prompt battery JSON then exit."),
+    system_prompt: Optional[str] = typer.Option(None, "--system-prompt", "--system_prompt", help="Optional system prompt."),
+    knn_k: int = typer.Option(8, "--knn-k", "--knn_k", help="k for kNN graph."),
+    leiden_resolution: float = typer.Option(1.0, "--leiden-resolution", "--leiden_resolution", help="Leiden resolution for clustering."),
+    bridge_threshold: float = typer.Option(0.5, "--bridge-threshold", "--bridge_threshold", help="Bridge edge threshold when plotting network."),
+    save_prefix: Optional[str] = typer.Option(None, "--save-prefix", "--save_prefix", help="Prefix for saving outputs."),
+    interactive: bool = typer.Option(False, "--interactive", help="Launch scoring configuration wizard."),
+    include_slugs: Optional[str] = typer.Option(None, "--include-slugs", "--include_slugs", help="Comma-separated slugs to include."),
+    exclude_slugs: Optional[str] = typer.Option(None, "--exclude-slugs", "--exclude_slugs", help="Comma-separated slugs to exclude."),
+    include_names: Optional[str] = typer.Option(None, "--include-names", "--include_names", help="Comma-separated model names to include."),
+    exclude_names: Optional[str] = typer.Option(None, "--exclude-names", "--exclude_names", help="Comma-separated model names to exclude."),
+    export_prompts: Optional[Path] = typer.Option(None, "--export-prompts", "--export_prompts", help="Write prompt battery JSON then exit."),
 ) -> None:
     """Run one or more stages of the pipeline."""
     stage = stage.lower()
@@ -255,3 +255,9 @@ def dashboard_cmd(host: str = "127.0.0.1", port: int = 5000, debug: bool = False
     flask_app = create_app()
     typer.echo(f"Serving dashboard on http://{host}:{port}")
     flask_app.run(debug=debug, host=host, port=port)
+
+
+
+
+
+
