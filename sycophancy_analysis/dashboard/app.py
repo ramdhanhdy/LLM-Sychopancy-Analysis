@@ -671,21 +671,25 @@ def _get_final_loader():
     """
     try:
         prefix = request.args.get('prefix', default=None, type=str)
-    except Exception:
+    except (RuntimeError, ValueError):
         prefix = None
     if prefix:
-        # Accept both absolute and relative paths; restrict to existing dir within RESULTS_DIR subtree
         try:
-            p = Path(prefix)
-            # If relative, resolve against BASE_DIR
-            if not p.is_absolute():
-                p = (BASE_DIR / p).resolve()
-            # Security: ensure the path is within RESULTS_DIR subtree to prevent path traversal
+            candidate = Path(prefix)
+            if not candidate.is_absolute():
+                candidate = BASE_DIR / candidate
+            candidate = candidate.resolve()
             results_dir = RESULTS_DIR.resolve()
-            if p.exists() and p.is_dir() and results_dir in p.parents or p == results_dir:
-                return FinalResultsLoader(str(p))
-        except Exception:
-            pass
+            if (
+                candidate.exists()
+                and candidate.is_dir()
+                and (candidate == results_dir or results_dir in candidate.parents)
+            ):
+                return FinalResultsLoader(str(candidate))
+        except (OSError, RuntimeError, ValueError) as exc:
+            logging.getLogger(__name__).warning(
+                "Invalid prefix provided (%s); falling back to default results.", prefix,
+            )
     return final_loader
 
 @app.route('/')
@@ -924,5 +928,6 @@ def api_responses_combined():
     except Exception as e:
         logging.getLogger(__name__).exception(f"Failed to load responses with scores")
         return jsonify({"error": str(e)}), 500
+
 
 

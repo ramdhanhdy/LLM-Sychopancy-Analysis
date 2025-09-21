@@ -93,7 +93,7 @@ This creates a new model-level network using TF‑IDF cosine similarity over the
 ```
 uv run python scripts/build_text_network.py `
   "results/combined_run_0c_1_1b_2b/responses_combined.json" `
-  --save_prefix "results/textnet_0c_1_1b_2b" `
+  --save-prefix "results/textnet_0c_1_1b_2b" `
   --knn_k 8 `
   --leiden_resolution 1.0 `
   --bridge_threshold 0.5 `
@@ -110,7 +110,7 @@ What it does:
 - Computes TF‑IDF features and cosine similarity between models.
 - Builds a k‑NN graph (Leiden communities) and MST backbone.
 
-Outputs (under the chosen `--save_prefix`):
+Outputs (under the chosen `--save-prefix`):
 - `text_network.png` — network image. Use `--fig_height/--fig_width` to control size.
 - `text_heatmap.html` — similarity heatmap (saved if Altair is available).
 - `model_response_counts.csv` — per‑model counts of unique prompts extracted.
@@ -118,7 +118,7 @@ Outputs (under the chosen `--save_prefix`):
 
 ## Outputs
 
-Using `--save_prefix results/run_001` produces:
+Using `--save-prefix results/run_001` produces:
 
 - Top-level (flat prefix artifacts)
   - `results/run_001_network.png` — Network graph with MST backbone, communities, bridges.
@@ -173,14 +173,14 @@ For metric definitions, see `docs/sycophancy_index_metrics.md`. For a deeper div
   - `visualization/` — network, heatmap, metrics, sidecar metadata, helpers.
   - `pipeline.py` — orchestrates prompts + collection + SSS + matrices + viz + SI table.
 - `scripts/` — utilities including `combine_runs.py` and helpers for merging/rescoring.
-- `dataset/` — prompt battery and example inputs (`--export_prompts` can populate).
+- `dataset/` — prompt battery and example inputs (`--export-prompts` can populate).
 - `results/` — generated artifacts (responses, CSV, vectors, matrices, metadata, plots).
 - `docs/`, `notebooks/` — reference and exploration.
 
 ## Tips & Troubleshooting
 
 - Altair may be unavailable in some environments; the pipeline logs and skips saving the heatmap if so.
-- If `--stage viz` fails on missing inputs, run `--stage all` or make sure SSS and similarity artifacts exist for the same `--save_prefix`.
+- If `--stage viz` fails on missing inputs, run `--stage all` or make sure SSS and similarity artifacts exist for the same `--save-prefix`.
 - Network layout uses UMAP when installed; otherwise it falls back to a spring layout.
 - Large model lists can be slow and incur costs; use `--include_*` or `--exclude_*` flags to narrow the set.
 

@@ -16,7 +16,7 @@ from sycophancy_analysis.visualization import run_visualization
 
 load_dotenv()
 
-app = typer.Typer(help="Run stages of the sycophancy analysis workflow.")
+app = typer.Typer(help="Run stages of the sycophancy analysis workflow.", no_args_is_help=True)
 
 
 def ask_choice(prompt: str, choices: list[str], default: str) -> str:
@@ -144,20 +144,12 @@ def pipeline(
     exclude_slugs: Optional[str] = typer.Option(None, "--exclude-slugs", "--exclude_slugs", help="Comma-separated slugs to exclude."),
     include_names: Optional[str] = typer.Option(None, "--include-names", "--include_names", help="Comma-separated model names to include."),
     exclude_names: Optional[str] = typer.Option(None, "--exclude-names", "--exclude_names", help="Comma-separated model names to exclude."),
-    export_prompts: Optional[Path] = typer.Option(None, "--export-prompts", "--export_prompts", help="Write prompt battery JSON then exit."),
 ) -> None:
     """Run one or more stages of the pipeline."""
     stage = stage.lower()
     allowed = {"all", "collect", "score", "viz"}
     if stage not in allowed:
         raise typer.BadParameter("Stage must be one of: all, collect, score, viz.")
-
-    if export_prompts:
-        df = build_sycophancy_battery()
-        export_prompts.parent.mkdir(parents=True, exist_ok=True)
-        df.to_json(export_prompts, orient="records", indent=2)
-        typer.echo(f"Exported {len(df)} prompts to {export_prompts}")
-        raise typer.Exit()
 
     if interactive:
         configure_scoring_menu()
@@ -175,10 +167,15 @@ def pipeline(
     include_name_set = _parse_csv_option(include_names)
     exclude_name_set = _parse_csv_option(exclude_names)
 
-    selected = [
-        cfg for cfg in MODEL_CONFIGS
-        if (not include_slug_set and not include_name_set or cfg.get("slug") in include_slug_set or cfg.get("name") in include_name_set)
-    ] if (include_slug_set or include_name_set) else list(MODEL_CONFIGS)
+    selected = (
+        [
+            cfg
+            for cfg in MODEL_CONFIGS
+            if ((not include_slug_set and not include_name_set) or (cfg.get("slug") in include_slug_set) or (cfg.get("name") in include_name_set))
+        ]
+        if (include_slug_set or include_name_set)
+        else list(MODEL_CONFIGS)
+    )
 
     if exclude_slug_set or exclude_name_set:
         selected = [
@@ -258,9 +255,4 @@ def dashboard_cmd(host: str = "127.0.0.1", port: int = 5000, debug: bool = False
     flask_app = create_app()
     typer.echo(f"Serving dashboard on http://{host}:{port}")
     flask_app.run(debug=debug, host=host, port=port)
-
-
-
-
-
 
