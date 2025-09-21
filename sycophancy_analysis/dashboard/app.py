@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Dashboard server for LLM Judge Evaluation Results
 Serves the HTML dashboard and provides API endpoints for evaluation data
@@ -43,7 +42,7 @@ class SafeJSONEncoder(json.JSONEncoder):
         else:
             obj = self._safe_value(obj)
         return super().encode(obj)
-    
+
     def _safe_value(self, value):
         if isinstance(value, float):
             if np.isnan(value) or np.isinf(value):
@@ -54,7 +53,35 @@ class SafeJSONEncoder(json.JSONEncoder):
             return [self._safe_value(v) for v in value]
         return value
 
-app.json_encoder = SafeJSONEncoder
+# Flask 2.3+ JSON provider approach (preferred)
+try:
+    # Try modern Flask JSON provider approach first
+    from flask.json.provider import DefaultJSONProvider
+    class SafeJSONProvider(DefaultJSONProvider):
+        def default(self, obj):
+            if isinstance(obj, float):
+                if np.isnan(obj) or np.isinf(obj):
+                    return None
+            elif isinstance(obj, dict):
+                return {k: self._safe_value(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [self._safe_value(v) for v in obj]
+            return super().default(obj)
+
+        def _safe_value(self, value):
+            if isinstance(value, float):
+                if np.isnan(value) or np.isinf(value):
+                    return None
+            elif isinstance(value, dict):
+                return {k: self._safe_value(v) for k, v in value.items()}
+            elif isinstance(value, list):
+                return [self._safe_value(v) for v in value]
+            return value
+
+    app.json = SafeJSONProvider(app)
+except ImportError:
+    # Fallback to legacy json_encoder for older Flask versions
+    app.json_encoder = SafeJSONEncoder
 
 # Force server reload - updated CSV loading logic
 
@@ -202,12 +229,12 @@ class DashboardDataLoader:
             prompt_scores = next((r for r in detailed_results if r['prompt_id'] == prompt_id), None)
             if prompt_scores:
                 scores = {
-                    'endorse_stance': prompt_scores.get('endorse_stance', 0),
-                    'harm_validation': prompt_scores.get('harm_validation', 0),
-                    'challenge': prompt_scores.get('challenge', 0),
-                    'flattery_density': prompt_scores.get('flattery_density', 0),
-                    'pred_label': prompt_scores.get('pred_label', 0),
-                    'human_eval': prompt_scores.get('human_eval', ''),
+                    'endorse_stance': prompt_scores.get('endorse_stance'),
+                    'harm_validation': prompt_scores.get('harm_validation'),
+                    'challenge': prompt_scores.get('challenge'),
+                    'flattery_density': prompt_scores.get('flattery_density'),
+                    'pred_label': prompt_scores.get('pred_label'),
+                    'human_eval': prompt_scores.get('human_eval'),
                 }
         
         return {**prompt_data, 'scores': scores}
@@ -537,7 +564,12 @@ class FinalResultsLoader:
             norm = (emb - min_xy) / span
         except Exception as e:
             logging.getLogger(__name__).exception(f"UMAP failed, falling back to spring_layout")
-            pos = nx.spring_layout(nx.Graph(list(edge_map.values())), seed=random_state)
+            # Build proper NetworkX graph for spring layout fallback
+            G = nx.Graph()
+            G.add_nodes_from(range(n))
+            for (a, b) in edge_map.keys():
+                G.add_edge(a, b, weight=float(edge_map[(a, b)]['similarity']))
+            pos = nx.spring_layout(G, seed=random_state)
             # pos might be empty if graph construction failed; fallback to grid
             norm = np.zeros((n, 2), dtype=float)
             for i in range(n):
@@ -642,13 +674,15 @@ def _get_final_loader():
     except Exception:
         prefix = None
     if prefix:
-        # Accept both absolute and relative paths; restrict to existing dir
+        # Accept both absolute and relative paths; restrict to existing dir within RESULTS_DIR subtree
         try:
             p = Path(prefix)
             # If relative, resolve against BASE_DIR
             if not p.is_absolute():
                 p = (BASE_DIR / p).resolve()
-            if p.exists() and p.is_dir():
+            # Security: ensure the path is within RESULTS_DIR subtree to prevent path traversal
+            results_dir = RESULTS_DIR.resolve()
+            if p.exists() and p.is_dir() and results_dir in p.parents or p == results_dir:
                 return FinalResultsLoader(str(p))
         except Exception:
             pass

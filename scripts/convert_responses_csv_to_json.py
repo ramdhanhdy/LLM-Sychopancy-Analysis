@@ -10,9 +10,11 @@ and the flat layout:
 Usage examples:
   # Convert for a specific save_prefix directory
   python scripts/convert_responses_csv_to_json.py --prefix results/run_1b
+  uv run python scripts/convert_responses_csv_to_json.py --prefix results/run_1b
 
   # Recursively scan a root directory (e.g., "results/") and convert all found runs
   python scripts/convert_responses_csv_to_json.py --scan-root results
+  uv run python scripts/convert_responses_csv_to_json.py --scan-root results
 
 Options:
   --overwrite     Overwrite responses.json if it already exists (default: skip existing)
@@ -24,7 +26,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import Iterable, List, Set
+from typing import Iterable, List, Set, Optional
 
 import pandas as pd
 
@@ -123,7 +125,7 @@ def process_prefix(prefix: str, *, overwrite: bool, delete_csv: bool, dry_run: b
     return count
 
 
-def main(argv: Iterable[str] | None = None) -> int:
+def main(argv: Optional[Iterable[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Convert legacy responses.csv to responses.json across runs.")
     ap.add_argument("--prefix", action="append", default=[], help="Save prefix directory to process (can be used multiple times)")
     ap.add_argument("--scan-root", default=None, help="Root directory to recursively scan for prefixes (e.g., 'results')")

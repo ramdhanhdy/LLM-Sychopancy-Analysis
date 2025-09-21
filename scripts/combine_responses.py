@@ -298,10 +298,11 @@ def combine_responses_files(
     - pretty: pretty-print JSON output
     """
     # Determine inputs
-    if inputs is None or (isinstance(inputs, Iterable) and not list(inputs)):
+    if inputs is None:
         in_paths = _discover_response_csvs(prefixes)
     else:
-        in_paths = [Path(p) for p in inputs]
+        in_list = list(inputs)
+        in_paths = _discover_response_csvs(prefixes) if not in_list else [Path(p) for p in in_list]
     frames: List[pd.DataFrame] = []
     for p in in_paths:
         if not p.exists():

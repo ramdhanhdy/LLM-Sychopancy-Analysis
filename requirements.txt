@@ -15,4 +15,5 @@ python-dotenv
 tqdm
 Flask
 flask-cors
-typer
+typer~=0.17.4
+click>=8.2,<9

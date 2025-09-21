@@ -68,14 +68,14 @@ def _read_table(path: Path) -> pd.DataFrame:
     if suffix == ".jsonl":
         recs: List[dict] = []
         with path.open("r", encoding="utf-8") as f:
-            for line in f:
+            for lineno, line in enumerate(f, start=1):
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     recs.append(json.loads(line))
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[textnet] WARN jsonl parse error at {path}:{lineno}: {e}")
         return pd.DataFrame(recs)
     # Fallback
     return pd.read_csv(path)
@@ -192,8 +192,12 @@ def build_text_network(
         figsize=(float(fig_width), float(fig_height)),
     )
     out_img = os.path.join(results_path, "text_network.png")
-    fig.savefig(out_img, dpi=180, bbox_inches="tight")
-    print(f"[textnet] saved network image: {out_img}")
+    try:
+        fig.savefig(out_img, dpi=180, bbox_inches="tight")
+        print(f"[textnet] saved network image: {out_img}")
+    finally:
+        import matplotlib.pyplot as plt
+        plt.close(fig)
 
     # 7) Heatmap
     try:

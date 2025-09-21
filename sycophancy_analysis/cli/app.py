@@ -167,6 +167,9 @@ def pipeline(
     if stage == "viz" and not api_key:
         typer.echo("[note] Running visualization without API key; reasoning snapshots will be skipped.")
 
+    if stage in {"score", "viz"} and not save_prefix:
+        raise typer.BadParameter("Missing --save-prefix: score and viz require persisted artifacts to run.")
+
     include_slug_set = _parse_csv_option(include_slugs)
     exclude_slug_set = _parse_csv_option(exclude_slugs)
     include_name_set = _parse_csv_option(include_names)

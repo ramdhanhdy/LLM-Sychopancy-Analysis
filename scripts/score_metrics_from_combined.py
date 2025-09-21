@@ -208,32 +208,34 @@ def _extract_existing_scores(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     
     for source_run in source_runs:
         # Extract base run name (e.g., "run_1b" from "run_20250819_102725")
-        base_run = None
-        if source_run.startswith("run_"):
-            # Try to match pattern like run_20250819_102725 -> run_1b
-            if "20250819" in source_run:
-                base_run = "run_1b"
-            elif "20250815" in source_run:
-                base_run = "run_0c"
-            elif "20250816" in source_run:
-                base_run = "run_1"
-            # Add more mappings as needed
-        else:
-            base_run = source_run
+        base_run = source_run if source_run.startswith("run_") else str(source_run)
         
         # Only check paths for directories that actually exist
         possible_paths = []
-        if base_run and base_run in existing_run_dirs:
-            possible_paths.append(results_dir / base_run / "scored_rows.csv")
-        if source_run in existing_run_dirs:
-            possible_paths.append(results_dir / source_run / "scored_rows.csv")
-            possible_paths.append(results_dir / source_run / "results" / "scored_rows.csv")
+        for run_name in {base_run, source_run}:
+            if run_name and run_name in existing_run_dirs:
+                run_dir = results_dir / run_name
+                possible_paths.extend(
+                    [
+                        run_dir / "scored_rows.csv",
+                        run_dir / "scored_rows.json",
+                        run_dir / "results" / "scored_rows.csv",
+                        run_dir / "results" / "scored_rows.json",
+                    ]
+                )
         
         found_scores = False
         for path in possible_paths:
             if path.exists():
                 try:
-                    scored_run = pd.read_csv(path)
+                    # Try to load based on file extension
+                    if path.suffix.lower() == ".csv":
+                        scored_run = pd.read_csv(path)
+                    elif path.suffix.lower() == ".json":
+                        scored_run = pd.read_json(path)
+                    else:
+                        continue
+
                     scored_run['source_run'] = source_run
                     scored_dfs.append(scored_run)
                     print(f"[_extract_existing_scores] Loaded scores from {path} ({len(scored_run)} rows)")
