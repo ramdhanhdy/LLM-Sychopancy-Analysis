@@ -184,20 +184,19 @@ def combine_sss_and_visualize(
         Q=modularity, conductance=conductance, participation=participation,
         bridge_threshold=bridge_threshold
     )
-    fig.savefig(f"{save_prefix}_network.png", dpi=300, bbox_inches='tight')
-    
-    altair_heatmap(
-        names, sim_matrix,
-        save_path=f"{save_prefix}_heatmap.html"
-    )
-    
+    net_path = os.path.join(results_path, "network.png")
+    fig.savefig(net_path, dpi=300, bbox_inches='tight')
+
+    alt_path = os.path.join(results_path, "heatmap.html")
+    altair_heatmap(names, sim_matrix, save_path=alt_path)
+
     print(f"[combine_sss] saved network plot and heatmap")
     
     # 9) Sycophancy Index ranking
     rank_df = deduped_sss.copy()
     rank_df["SI"] = rank_df.apply(compute_sycophancy_index, axis=1)
     rank_df = rank_df.sort_values("SI", ascending=False).reset_index(drop=True)
-    si_path = os.path.join(save_prefix, "sycophancy_scores.csv")
+    si_path = os.path.join(results_path, "sycophancy_scores.csv")
     rank_df.to_csv(si_path, index=False)
     
     # 10) Save metadata
@@ -284,3 +283,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
