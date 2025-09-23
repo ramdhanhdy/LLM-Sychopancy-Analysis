@@ -878,6 +878,144 @@ def api_final_stance_elasticity():
     result = loader.stance_elasticity_metrics(min_n_per_topic=min_n, min_topics=min_topics)
     return jsonify(result)
 
+@app.route('/api/final_results/topic_bias')
+def api_final_topic_bias():
+    """Return topic bias data using LOO z-scoring methodology from notebook analysis."""
+    loader = _get_final_loader()
+    scored_rows_path = loader.base_dir / "scored_rows.csv"
+    
+    if not scored_rows_path.exists():
+        return jsonify({"error": "scored_rows.csv not found"}), 404
+    
+    try:
+        import pandas as pd
+        import numpy as np
+        
+        # Load scored rows data
+        df = pd.read_csv(scored_rows_path)
+        
+        # Check required columns
+        required_cols = {'model', 'topic', 'endorse_stance'}
+        missing = required_cols - set(df.columns)
+        if missing:
+            return jsonify({"error": f"Missing required columns: {missing}"}), 400
+        
+        # Clean data
+        df0 = df[['model', 'topic', 'endorse_stance']].dropna().copy()
+        if df0.empty:
+            return jsonify({"error": "No data after dropping NA values"}), 400
+        
+        # Config from notebook
+        min_topics = 6  # Reduced from 8 for dashboard display
+        min_n_per_topic = 3  # Reduced from 5 for more coverage
+        
+        # LOO topic standardization (following notebook methodology)
+        df0['sq'] = df0['endorse_stance'] ** 2
+        
+        # Compute totals per topic
+        tot = (df0.groupby('topic')
+               .agg(n_total=('endorse_stance', 'size'),
+                    sum_total=('endorse_stance', 'sum'),
+                    sumsq_total=('sq', 'sum'))
+               .reset_index())
+        
+        # Compute per (topic, model)
+        tm = (df0.groupby(['topic', 'model'])
+              .agg(n_m=('endorse_stance', 'size'),
+                   sum_m=('endorse_stance', 'sum'),
+                   sumsq_m=('sq', 'sum'))
+              .reset_index())
+        
+        # Merge and compute LOO statistics
+        stats = tm.merge(tot, on='topic', how='left')
+        stats['n_excl'] = stats['n_total'] - stats['n_m']
+        
+        # LOO mean & std (avoiding division by zero)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            mean_excl = (stats['sum_total'] - stats['sum_m']) / stats['n_excl']
+            ex2_excl = (stats['sumsq_total'] - stats['sumsq_m']) / stats['n_excl']
+            var_excl = ex2_excl - mean_excl**2
+        
+        stats['mean_excl'] = mean_excl
+        stats['std_excl'] = np.sqrt(np.maximum(var_excl, 0))
+        
+        # Mark invalid entries
+        invalid_mask = ((stats['n_excl'] < 2) | 
+                       ~np.isfinite(stats['std_excl']) | 
+                       (stats['std_excl'] <= 1e-12))
+        stats.loc[invalid_mask, ['mean_excl', 'std_excl']] = np.nan
+        
+        # Merge back and compute LOO z-scores
+        stats_small = stats[['topic', 'model', 'mean_excl', 'std_excl']]
+        sdf = df0.merge(stats_small, on=['topic', 'model'], how='left')
+        sdf['z_loo'] = (sdf['endorse_stance'] - sdf['mean_excl']) / sdf['std_excl']
+        sdf = sdf[np.isfinite(sdf['z_loo'])].copy()
+        
+        if sdf.empty:
+            return jsonify({"error": "All rows dropped during LOO z-scoring"}), 400
+        
+        # Aggregate per (model, topic)
+        mt = (sdf.groupby(['model', 'topic'])
+              .agg(z_mean=('z_loo', 'mean'),
+                   n=('z_loo', 'size'))
+              .reset_index())
+        
+        mt = mt[mt['n'] >= min_n_per_topic]
+        
+        # Filter models with sufficient topic coverage
+        coverage = mt.groupby('model')['topic'].nunique()
+        ok_models = coverage[coverage >= min_topics].index.tolist()
+        mt = mt[mt['model'].isin(ok_models)]
+        
+        if len(ok_models) == 0:
+            return jsonify({"error": "No models pass coverage thresholds"}), 400
+        
+        # Helper functions for weighted statistics
+        def wmedian(x, w):
+            x, w = np.asarray(x, dtype=float), np.asarray(w, dtype=float)
+            if len(x) == 0 or np.sum(w) <= 0:
+                return np.nan
+            order = np.argsort(x)
+            x, w = x[order], w[order]
+            cw = np.cumsum(w) / w.sum()
+            return np.interp(0.5, cw, x)
+        
+        def wmad(x, w):
+            m = wmedian(x, w)
+            return wmedian(np.abs(np.asarray(x, dtype=float) - m), np.asarray(w, dtype=float))
+        
+        # Calculate observed effect per model (wMAD over topic means)
+        processed_data = []
+        for model, group in mt.groupby('model'):
+            topic_dispersion = wmad(group['z_mean'].values, group['n'].values)
+            
+            # Get top topics by absolute z-score for display
+            top_topics = (group.assign(abs_z=group['z_mean'].abs())
+                         .nlargest(6, 'abs_z')[['topic', 'z_mean', 'n']]
+                         .to_dict('records'))
+            
+            processed_data.append({
+                'model': model,
+                'topic_dispersion_wMAD': float(topic_dispersion) if np.isfinite(topic_dispersion) else 0.0,
+                'topics': [{'topic': t['topic'], 
+                           'z_mean': float(t['z_mean']), 
+                           'n': int(t['n'])} for t in top_topics],
+                'topic_count': int(group['topic'].nunique())
+            })
+        
+        # Sort by topic dispersion (most variable first)
+        processed_data.sort(key=lambda x: x['topic_dispersion_wMAD'], reverse=True)
+        
+        return jsonify({
+            'run_path': str(loader.base_dir),
+            'items': processed_data,
+            'methodology': 'LOO z-scoring with weighted MAD'
+        })
+        
+    except Exception as e:
+        logging.getLogger(__name__).exception(f"Failed to process topic bias data")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/responses_combined')
 def api_responses_combined():
     """Return combined responses data with scores for prompt explorer."""

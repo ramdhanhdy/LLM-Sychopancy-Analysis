@@ -129,6 +129,69 @@
                 </div>
             </div>
             <div class="card">
+                <div class="card-header">🎯 Topic Transfer Analysis - Endorsement Consistency Across Subjects</div>
+                <div class="card-content">
+                    <div style="height:600px;"><canvas id="topicBiasChart"></canvas></div>
+                    <div id="topicBiasExplanation" style="background: linear-gradient(135deg, #e0e1dd 0%, #778da9 100%); border:1px solid rgba(119, 141, 169, 0.5); border-radius:12px; padding:20px; margin-top:20px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                            <h4 style="margin:0; color:#0d1b2a; font-size:1.1rem; font-weight: 700;">📊 Understanding Topic Transfer Effects</h4>
+                            <button id="toggleTopicBiasDesc" style="background: linear-gradient(135deg, #1b263b 0%, #415a77 100%); color:#e0e1dd; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.8rem; font-weight: 600; transition: all 0.2s; flex-shrink: 0; margin-left: 16px;">Show</button>
+                        </div>
+                        <div id="topicBiasDescContent" style="display:none;">
+                            <p style="margin:0 0 12px 0; color:#0d1b2a; line-height:1.5;">
+                                This butterfly plot shows how each model's <strong>endorsement behavior</strong> varies across different topics using Leave-One-Out (LOO) z-scoring. 
+                                Each bar represents how much a model's topic-specific endorsement deviates from the cross-topic baseline for that topic.
+                            </p>
+                            
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;">
+                                <div>
+                                    <strong style="color:#0d1b2a;">📊 How to Read This Chart:</strong><br>
+                                    <span style="color:#0d1b2a; font-size:0.9rem;">Each model shows its most deviant topics (highest absolute z-scores)</span>
+                                    <ul style="margin:4px 0 0 16px; color:#0d1b2a; font-size:0.85rem;">
+                                        <li><strong>Blue bars (right):</strong> Topics where the model endorses MORE than expected</li>
+                                        <li><strong>Red bars (left):</strong> Topics where the model endorses LESS than expected</li>
+                                        <li><strong>Length:</strong> Magnitude of deviation (z-score) from topic baseline</li>
+                                    </ul>
+                                </div>
+                                <div>
+                                    <strong style="color:#0d1b2a;">🎯 What This Reveals:</strong><br>
+                                    <span style="color:#0d1b2a; font-size:0.9rem;">Topic-specific endorsement patterns and consistency</span>
+                                    <ul style="margin:4px 0 0 16px; color:#0d1b2a; font-size:0.85rem;">
+                                        <li><strong>Consistent models:</strong> Small, similar deviations across topics</li>
+                                        <li><strong>Topic-sensitive models:</strong> Large variations between subjects</li>
+                                        <li><strong>Systematic biases:</strong> Consistent over/under-endorsement patterns</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <h4 style="margin:12px 0 8px 0; color:#0d1b2a; font-size:1rem; font-weight: 700;">🔍 Key Patterns to Look For</h4>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; font-size:0.85rem;">
+                                <div style="padding:12px; background:rgba(34, 139, 34, 0.12); border-radius:8px; border-left:4px solid #228B22; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                    <strong style="color:#0d1b2a;">✅ Ideal: Topic-Consistent</strong><br>
+                                    <span style="color:#1b4332;">Short, balanced bars. Model maintains consistent endorsement patterns regardless of topic, indicating stable policy adherence.</span>
+                                </div>
+                                <div style="padding:12px; background:rgba(245, 158, 11, 0.12); border-radius:8px; border-left:4px solid #F59E0B; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                    <strong style="color:#0d1b2a;">⚠️ Concerning: Topic-Dependent</strong><br>
+                                    <span style="color:#92400e;">Large variations between topics. Model may have learned topic-specific biases that could affect fairness and consistency.</span>
+                                </div>
+                                <div style="padding:12px; background:rgba(59, 130, 246, 0.12); border-radius:8px; border-left:4px solid #3B82F6; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                    <strong style="color:#0d1b2a;">📈 Pattern: Over-Endorsement</strong><br>
+                                    <span style="color:#1e40af;">Mostly blue bars. Model tends to agree more than expected across topics - may indicate sycophantic tendencies.</span>
+                                </div>
+                                <div style="padding:12px; background:rgba(239, 68, 68, 0.12); border-radius:8px; border-left:4px solid #EF4444; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                    <strong style="color:#0d1b2a;">📉 Pattern: Under-Endorsement</strong><br>
+                                    <span style="color:#991b1b;">Mostly red bars. Model tends to disagree more than expected - may indicate contrarian or overly cautious behavior.</span>
+                                </div>
+                            </div>
+                            
+                            <p style="margin:12px 0 0 0; color:#0d1b2a; font-size:0.9rem; font-style:italic;">
+                                💡 <strong>Methodology:</strong> Uses Leave-One-Out z-scoring to standardize endorsement across topics, then calculates weighted MAD to measure topic dispersion. Models are ranked by topic variability (most variable first).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
                 <div class="card-header">📋 Per-Model Metrics</div>
                 <div class="card-content"><div id="finalResultsTable"></div></div>
             </div>
@@ -221,6 +284,17 @@
                 console.error(e);
                 displayError('#elasticityChart', `Failed to load stance elasticity metrics. ${e.message || e}`);
                 return { items: [], summary: {} };
+            }
+        }
+
+        async function loadTopicBiasData() {
+            try {
+                const res = await fetchJSON(withPrefix('/api/final_results/topic_bias'));
+                return res || { items: [] };
+            } catch (e) {
+                console.error(e);
+                displayError('#topicBiasChart', `Failed to load topic bias data. ${e.message || e}`);
+                return { items: [] };
             }
         }
 
@@ -416,6 +490,155 @@
             });
         }
 
+        function renderTopicBiasChart(payload) {
+            const canvas = document.getElementById('topicBiasChart');
+            if (!canvas) return;
+            const items = (payload && payload.items) ? payload.items : [];
+            if (!items.length) { 
+                canvas.parentElement.innerHTML = '<p class="section-description">No topic transfer data available.</p>'; 
+                return; 
+            }
+            if (typeof window.Chart === 'undefined') { 
+                canvas.parentElement.innerHTML = '<p class="section-description">Chart.js not loaded.</p>'; 
+                return; 
+            }
+
+            // Prepare data for butterfly plot showing LOO z-scores
+            const topModelsCount = Math.min(12, items.length); // Show top 12 models
+            const topModels = items.slice(0, topModelsCount);
+
+            // Create labels and data arrays
+            const labels = [];
+            const positiveData = [];
+            const negativeData = [];
+
+            topModels.forEach((modelData) => {
+                const model = modelData.model;
+                const topics = modelData.topics || [];
+                const dispersion = modelData.topic_dispersion_wMAD || 0;
+                
+                // Add model header with dispersion info
+                labels.push(`${model} (wMAD: ${dispersion.toFixed(3)})`);
+                positiveData.push(0);
+                negativeData.push(0);
+
+                // Add topic data (already sorted by absolute z-score in API)
+                topics.forEach((topicData) => {
+                    const label = `  └ ${topicData.topic}`;
+                    labels.push(label);
+                    
+                    const zScore = topicData.z_mean;
+                    if (zScore >= 0) {
+                        positiveData.push(zScore);
+                        negativeData.push(0);
+                    } else {
+                        positiveData.push(0);
+                        negativeData.push(zScore);
+                    }
+                });
+            });
+
+            if (window._topicBiasChart) try { window._topicBiasChart.destroy(); } catch(_){}
+            
+            window._topicBiasChart = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Higher Endorsement Than Expected',
+                            data: positiveData,
+                            backgroundColor: '#3b82f6',
+                            borderColor: '#2563eb',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Lower Endorsement Than Expected',
+                            data: negativeData,
+                            backgroundColor: '#ef4444',
+                            borderColor: '#dc2626',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y', // Horizontal bars
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'LOO Z-Score (Deviation from Topic Baseline)'
+                            },
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Models and Topics'
+                            },
+                            ticks: {
+                                font: {
+                                    size: 9
+                                },
+                                callback: function(value, index) {
+                                    const label = this.getLabelForValue(value);
+                                    // Truncate long model names but keep topic indentation
+                                    if (label.startsWith('  └')) {
+                                        return label.length > 25 ? label.substring(0, 22) + '...' : label;
+                                    } else {
+                                        return label.length > 35 ? label.substring(0, 32) + '...' : label;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.x;
+                                    if (value === 0) return ''; // Skip model headers
+                                    const label = context.dataset.label;
+                                    return `${label}: ${value.toFixed(3)}`;
+                                },
+                                afterLabel: function(context) {
+                                    const value = context.parsed.x;
+                                    if (value === 0) return ''; // Skip model headers
+                                    
+                                    const labelText = context.label;
+                                    if (labelText.startsWith('  └')) {
+                                        const topic = labelText.replace('  └ ', '');
+                                        
+                                        // Find the corresponding data
+                                        for (const modelData of items) {
+                                            const topicData = modelData.topics.find(t => t.topic === topic);
+                                            if (topicData) {
+                                                return [
+                                                    `Model: ${modelData.model}`,
+                                                    `Topic: ${topic}`,
+                                                    `Sample size: ${topicData.n}`,
+                                                    `Model dispersion (wMAD): ${modelData.topic_dispersion_wMAD.toFixed(3)}`
+                                                ];
+                                            }
+                                        }
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         function buildNetworkUrl() {
             const k = document.getElementById('netK').value;
             const layout = document.getElementById('netLayout').value;
@@ -437,6 +660,8 @@
             if (items && items.length) { renderSIChart(items); renderFinalResultsTable(items); }
             // Elasticity scatter
             try { const payload = await loadElasticityData(); renderElasticityChartPayload(payload); } catch(e) { console.error(e); }
+            // Topic bias butterfly plot
+            try { const biasPayload = await loadTopicBiasData(); renderTopicBiasChart(biasPayload); } catch(e) { console.error(e); }
             renderNetworkImage();
             const btn = document.getElementById('netRefresh'); if (btn) btn.addEventListener('click', renderNetworkImage);
             
@@ -452,6 +677,21 @@
                     
                     // Update button text
                     toggleBtn.textContent = isHidden ? 'Hide' : 'Show';
+                });
+            }
+
+            // Setup topic bias description toggle
+            const toggleBiasBtn = document.getElementById('toggleTopicBiasDesc');
+            const biasContent = document.getElementById('topicBiasDescContent');
+            if (toggleBiasBtn && biasContent) {
+                toggleBiasBtn.addEventListener('click', () => {
+                    const isHidden = biasContent.style.display === 'none';
+                    
+                    // Toggle content visibility
+                    biasContent.style.display = isHidden ? 'block' : 'none';
+                    
+                    // Update button text
+                    toggleBiasBtn.textContent = isHidden ? 'Hide' : 'Show';
                 });
             }
         }

@@ -93,7 +93,7 @@ This creates a new model-level network using TF‑IDF cosine similarity over the
 ```
 uv run python scripts/build_text_network.py `
   "results/combined_run_0c_1_1b_2b/responses_combined.json" `
-  --save-prefix "results/textnet_0c_1_1b_2b" `
+  --save_prefix "results/textnet_0c_1_1b_2b" `
   --knn_k 8 `
   --leiden_resolution 1.0 `
   --bridge_threshold 0.5 `
